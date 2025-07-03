@@ -8,8 +8,35 @@ local defaults = {
 CritTracker = {}
 local ADDON_NAME = "CritTracker"
 
+CritTracker.savedVars = nil
 CritTracker.critCount = 0
 CritTracker.normalCount = 0
+CritTracker.totalCritDamage = 0
+CritTracker.totalNormalDamage = 0
+CritTracker.inCombat = false
+
+--=============================================================================
+-- DEBUG HELPER
+--=============================================================================
+function BossFightContribution:DebugPrint(message)
+    if self.savedVars and self.savedVars.showNotifications then
+        d(message)
+    end
+end
+
+--=============================================================================
+-- GET STAT SHEET CRIT CHANCE
+--=============================================================================
+function CritTracker:GetStatSheetCritChance()
+    local baseCritRating = 10
+    local critRating = GetPlayerStat(STAT_CRITICAL_STRIKE)
+
+    -- Convert rating to percentage (ESO formula)
+    local critChance = (critRating / 219) + baseCritRating
+
+    -- Cap at 100%
+    return math.min(critChance, 100)
+end
 
 --=============================================================================
 -- TRACK PLAYER DAMAGE
