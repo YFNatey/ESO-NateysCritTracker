@@ -14,16 +14,7 @@
                     <Dimensions x="900" y="40" />
                 </Label>
                 <Label
-                    name="line2_CritStats"
-                    font="$(BOLD_FONT)|24"
-                    color="FFFFFF"
-                    text=""
-                    hidden="true"
-                    drawLevel="6">
-                    <Dimensions x="900" y="40" />
-                </Label>
-                <Label
-                    name="line3_CritDamage"
+                    name="line2_CritDamage"
                     font="$(BOLD_FONT)|24"
                     color="FFFFFF"
                     text=""

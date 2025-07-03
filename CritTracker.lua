@@ -1,8 +1,9 @@
 local defaults = {
-    fontSize = 28,
+    fontSize = 18,
     labelPosX = 560,
-    labelPosY = 60,
-    showNotifications = false
+    labelPosY = 20,
+    showNotifications = false,
+    simpleMode = false
 }
 
 CritTracker = {}
@@ -15,6 +16,8 @@ CritTracker.normalCount = 0
 CritTracker.totalCritDamage = 0
 CritTracker.totalNormalDamage = 0
 CritTracker.inCombat = false
+CritTracker.critMultiplier = 0
+CritTracker.critDamagePercent = 0
 
 --=============================================================================
 -- DEBUG HELPER
@@ -35,7 +38,7 @@ function CritTracker:GetStatSheetCritChance()
     -- Convert rating to percentage
     local critChance = (critRating / 219)
 
-    return math.min(critChance, 100) -- Cap at 100%
+    return math.min(critChance, 100)
 end
 
 --=============================================================================
@@ -44,10 +47,6 @@ end
 function CritTracker:OnCombatStateChanged(inCombat)
     if inCombat then
         self.inCombat = true
-        self.critCount = 0
-        self.normalCount = 0
-        self.totalCritDamage = 0
-        self.totalNormalDamage = 0
         self:DebugPrint("Combat Started")
     else
         self.inCombat = false
@@ -76,13 +75,6 @@ function CritTracker:OnCombatEvent(eventCode, result, isError, abilityName, abil
             self:DebugPrint("NORMAL hit for" .. hitValue)
             self.totalNormalDamage = self.totalNormalDamage + hitValue
         end
-
-        -- Show crit ratio
-        local totalHits = self.critCount + self.normalCount
-        if totalHits > 0 then
-            local critRate = (self.critCount / totalHits) * 100
-            self:DebugPrint(string.format("Crit Rate: %.1f%% (%d crits / %d total)", critRate, self.critCount, totalHits))
-        end
     end
     if self.inCombat then
         self:UpdateDisplay()
@@ -94,15 +86,22 @@ end
 --=============================================================================
 function CritTracker:UpdateDisplay()
     local totalHits = self.critCount + self.normalCount
-    local totalDamage = self.totalCritDamage + self.totalNormalDamage
 
     if totalHits == 0 then
         -- Show stat sheet info when no combat data
         local statSheetCrit = self:GetStatSheetCritChance()
-        local line1Text = string.format("Stat Sheet Crit: %.1f%%",
-            statSheetCrit)
 
-        line1_CritInfo:SetText(line1Text)
+        if self.savedVars.simpleMode then
+            local line1Text = string.format("Crit: %.1f%%", statSheetCrit)
+            line1_CritInfo:SetText(line1Text)
+            line2_CritDamage:SetText("") -- Clear second line in simple mode
+        else
+            local line1Text = string.format("Stat Sheet Crit: %.1f%%", statSheetCrit)
+            line1_CritInfo:SetText(line1Text)
+            local line2Text = string.format("Crit Damage: +%.0f%%",
+                self.critDamagePercent)
+            line2_CritDamage:SetText(line2Text)
+        end
         return
     end
 
@@ -113,20 +112,27 @@ function CritTracker:UpdateDisplay()
     -- Calculate average crit damage vs normal damage
     local avgCritDamage = self.critCount > 0 and (self.totalCritDamage / self.critCount) or 0
     local avgNormalDamage = self.normalCount > 0 and (self.totalNormalDamage / self.normalCount) or 0
-    local critMultiplier = avgNormalDamage > 0 and (avgCritDamage / avgNormalDamage) or 0
+    self.critMultiplier = avgNormalDamage > 0 and (avgCritDamage / avgNormalDamage) or 0
+    self.critDamagePercent = self.critMultiplier > 0 and ((self.critMultiplier - 1) * 100) or 0
 
-    -- Display lines
-    local line1Text = string.format("Stat Sheet: %.1f%% | Active Crit: %.1f%%",
-        statSheetCrit, activeCritRate)
+    -- Simple Mode
+    if self.savedVars.simpleMode then
+        local line1Text = string.format("Crit: %.1f%% | Dmg: +%.0f%%",
+            activeCritRate, self.critDamagePercent)
 
-    local critDamagePercent = critMultiplier > 0 and ((critMultiplier - 1) * 100) or 0
+        line1_CritInfo:SetText(line1Text)
+        line2_CritDamage:SetText("") -- Clear the second line
 
-    local line3Text = string.format("Crit Damage: +%.0f%% (%.2fx)",
-        critDamagePercent, critMultiplier)
+        -- Verbose Mode
+    else
+        local line1Text = string.format("Stat Sheet: %.1f%% | Active Crit: %.1f%%",
+            statSheetCrit, activeCritRate)
+        local line2Text = string.format("Crit Damage: +%.0f%% ",
+            self.critDamagePercent)
 
-    line1_CritInfo:SetText(line1Text)
-
-    line3_CritDamage:SetText(line3Text)
+        line1_CritInfo:SetText(line1Text)
+        line2_CritDamage:SetText(line2Text)
+    end
 end
 
 --=============================================================================
@@ -153,15 +159,16 @@ local function Initialize()
         {
             fontSize = 18,
             labelPosX = 560,
-            labelPosY = 60,
+            labelPosY = 20,
             showNotifications = false,
+            simpleMode = false
         }
     )
-    -- Hide labels initially
+
     local labels = CritTracker:GetLabels()
     for i, label in ipairs(labels) do
         if label then
-            label:SetHidden(true)
+            label:SetHidden(false)
         end
     end
 
@@ -171,6 +178,7 @@ local function Initialize()
         function(...) CritTracker:OnCombatEvent(...) end)
 
     CritTracker:CreateSettingsMenu()
+    CritTracker:UpdateDisplay()
 end
 
 
@@ -180,8 +188,7 @@ end
 function CritTracker:GetLabels()
     return {
         _G["line1_CritInfo"],
-        _G["line2_CritStats"],
-        _G["line3_CritDamage"]
+        _G["line2_CritDamage"]
     }
 end
 
@@ -232,7 +239,6 @@ function CritTracker:CreateSettingsMenu()
         [1] = {
             type = "button",
             name = "Toggle UI",
-            tooltip = "Show/hide the crit tracking display",
             func = function()
                 local labels = self:GetLabels()
                 local isCurrentlyHidden = labels[1] and labels[1]:IsHidden()
@@ -258,12 +264,13 @@ function CritTracker:CreateSettingsMenu()
         [2] = {
             type = "button",
             name = "Reset Stats",
-            tooltip = "Clear current combat crit statistics",
             func = function()
                 self.critCount = 0
                 self.normalCount = 0
                 self.totalCritDamage = 0
                 self.totalNormalDamage = 0
+                self.critDamagePercent = 0
+                self.critMultiplier = 0
                 self:UpdateDisplay()
                 d("Crit stats reset")
             end
@@ -318,6 +325,19 @@ function CritTracker:CreateSettingsMenu()
             type = "divider",
         },
         [9] = {
+            type = "checkbox",
+            name = "Simple Display Mode",
+            getFunc = function() return self.savedVars.simpleMode end,
+            setFunc = function(value)
+                self.savedVars.simpleMode = value
+                self:UpdateDisplay()
+            end,
+            default = false,
+        },
+        [10] = {
+            type = "divider",
+        },
+        [11] = {
             type = "checkbox",
             name = "Enable Debug Notifications",
             getFunc = function() return self.savedVars.showNotifications end,
