@@ -52,6 +52,7 @@ function CritTracker:OnCombatStateChanged(inCombat)
     else
         self.inCombat = false
         self:DebugPrint("Combat Ended")
+        self:DebugPrint("Updating Character sheet crit percentage")
         self:UpdateDisplay()
     end
 end
@@ -68,12 +69,12 @@ function CritTracker:OnCombatEvent(eventCode, result, isError, abilityName, abil
         self.playerDamage = self.playerDamage + hitValue
 
         if result == ACTION_RESULT_CRITICAL_DAMAGE or result == ACTION_RESULT_DOT_TICK_CRITICAL then
-            self:DebugPrint("CRITICAL hit for" .. hitValue)
+            self:DebugPrint("CRITICAL hit for " .. hitValue)
             self.critCount = self.critCount + 1
             self.totalCritDamage = self.totalCritDamage + hitValue
         elseif result == ACTION_RESULT_DAMAGE or result == ACTION_RESULT_DOT_TICK then
             self.normalCount = self.normalCount + 1
-            self:DebugPrint("NORMAL hit for" .. hitValue)
+            self:DebugPrint("NORMAL hit for " .. hitValue)
             self.totalNormalDamage = self.totalNormalDamage + hitValue
         end
     end
@@ -87,11 +88,10 @@ end
 --=============================================================================
 function CritTracker:UpdateDisplay()
     local totalHits = self.critCount + self.normalCount
+    local charSheet = self:GetCharSheetCritChance()
 
     if totalHits == 0 then
         -- Show stat sheet info when no combat data
-        local charSheet = self:GetCharSheetCritChance()
-
         if self.savedVars.simpleMode then
             local line1Text = string.format("Crit: %.1f%%", charSheet)
             line1_CritInfo:SetText(line1Text)
@@ -106,7 +106,6 @@ function CritTracker:UpdateDisplay()
 
     -- Crit rate
     local activeCritRate = (self.critCount / totalHits) * 100
-    local charSheet = self:GetCharSheetCritChance()
 
     -- Calculate average crit damage vs normal damage
     local avgCritDamage = self.critCount > 0 and (self.totalCritDamage / self.critCount) or 0
