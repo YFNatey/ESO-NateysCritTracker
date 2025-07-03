@@ -4,7 +4,6 @@
 ## APIVersion: 101046
 ## SavedVariables: CritTracker_SavedVars
 ## ConsoleDependsOn: LibAddonMenu-2.0
-## ConsoleDependsOn: LibHarvensAddonSettings
 
 CritTracker.xml
 CritTracker.lua

@@ -3,7 +3,8 @@ local defaults = {
     labelPosX = 560,
     labelPosY = 20,
     showNotifications = false,
-    simpleMode = false
+    simpleMode = false,
+    showCritDmg = true
 }
 
 CritTracker = {}
@@ -31,7 +32,7 @@ end
 --=============================================================================
 -- GET STAT SHEET CRIT CHANCE
 --=============================================================================
-function CritTracker:GetStatSheetCritChance()
+function CritTracker:GetCharSheetCritChance()
     -- Get weapon crit rating
     local critRating = GetPlayerStat(STAT_CRITICAL_STRIKE)
 
@@ -66,11 +67,11 @@ function CritTracker:OnCombatEvent(eventCode, result, isError, abilityName, abil
     if sourceType == COMBAT_UNIT_TYPE_PLAYER and hitValue > 1 then
         self.playerDamage = self.playerDamage + hitValue
 
-        if result == ACTION_RESULT_CRITICAL_DAMAGE then
+        if result == ACTION_RESULT_CRITICAL_DAMAGE or result == ACTION_RESULT_DOT_TICK_CRITICAL then
             self:DebugPrint("CRITICAL hit for" .. hitValue)
             self.critCount = self.critCount + 1
             self.totalCritDamage = self.totalCritDamage + hitValue
-        elseif result == ACTION_RESULT_DAMAGE then
+        elseif result == ACTION_RESULT_DAMAGE or result == ACTION_RESULT_DOT_TICK then
             self.normalCount = self.normalCount + 1
             self:DebugPrint("NORMAL hit for" .. hitValue)
             self.totalNormalDamage = self.totalNormalDamage + hitValue
@@ -89,25 +90,23 @@ function CritTracker:UpdateDisplay()
 
     if totalHits == 0 then
         -- Show stat sheet info when no combat data
-        local statSheetCrit = self:GetStatSheetCritChance()
+        local charSheet = self:GetCharSheetCritChance()
 
         if self.savedVars.simpleMode then
-            local line1Text = string.format("Crit: %.1f%%", statSheetCrit)
+            local line1Text = string.format("Crit: %.1f%%", charSheet)
             line1_CritInfo:SetText(line1Text)
             line2_CritDamage:SetText("") -- Clear second line in simple mode
         else
-            local line1Text = string.format("Stat Sheet Crit: %.1f%%", statSheetCrit)
+            local line1Text = string.format("Character Sheet: %.1f%%", charSheet)
             line1_CritInfo:SetText(line1Text)
-            local line2Text = string.format("Crit Damage: +%.0f%%",
-                self.critDamagePercent)
-            line2_CritDamage:SetText(line2Text)
+            line2_CritDamage:SetText("")
         end
         return
     end
 
     -- Crit rate
     local activeCritRate = (self.critCount / totalHits) * 100
-    local statSheetCrit = self:GetStatSheetCritChance()
+    local charSheet = self:GetCharSheetCritChance()
 
     -- Calculate average crit damage vs normal damage
     local avgCritDamage = self.critCount > 0 and (self.totalCritDamage / self.critCount) or 0
@@ -117,34 +116,21 @@ function CritTracker:UpdateDisplay()
 
     -- Simple Mode
     if self.savedVars.simpleMode then
-        local line1Text = string.format("Crit: %.1f%% | Dmg: +%.0f%%",
-            activeCritRate, self.critDamagePercent)
-
+        local line1Text = string.format("Crit: %.1f%%", activeCritRate)
+        if self.savedVars.showCritDmg then
+            line1Text = string.format("Crit: %.1f%% • Dmg: +%.0f%%", activeCritRate, self.critDamagePercent)
+        end
         line1_CritInfo:SetText(line1Text)
-        line2_CritDamage:SetText("") -- Clear the second line
-
-        -- Verbose Mode
+        line2_CritDamage:SetText("")
     else
-        local line1Text = string.format("Stat Sheet: %.1f%% | Active Crit: %.1f%%",
-            statSheetCrit, activeCritRate)
-        local line2Text = string.format("Crit Damage: +%.0f%% ",
-            self.critDamagePercent)
-
+        local line1Text = string.format("Character Sheet: %.1f%% • Active Crit: %.1f%%",
+            charSheet, activeCritRate)
+        local line2Text = ""
+        if self.savedVars.showCritDmg then
+            line2Text = string.format("Average Crit Damage: +%.0f%%", self.critDamagePercent)
+        end
         line1_CritInfo:SetText(line1Text)
         line2_CritDamage:SetText(line2Text)
-    end
-end
-
---=============================================================================
--- FORMAT NUMBERS
---=============================================================================
-function CritTracker:FormatNumber(number)
-    if number >= 1000000 then
-        return string.format("%.1fM", number / 1000000)
-    elseif number >= 1000 then
-        return string.format("%.1fk", number / 1000)
-    else
-        return string.format("%.0f", number)
     end
 end
 
@@ -161,7 +147,8 @@ local function Initialize()
             labelPosX = 560,
             labelPosY = 20,
             showNotifications = false,
-            simpleMode = false
+            simpleMode = false,
+            showCritDmg = true
         }
     )
 
@@ -272,7 +259,7 @@ function CritTracker:CreateSettingsMenu()
                 self.critDamagePercent = 0
                 self.critMultiplier = 0
                 self:UpdateDisplay()
-                d("Crit stats reset")
+                self:DebugPrint("Crit stats reset")
             end
         },
         [3] = {
@@ -335,9 +322,21 @@ function CritTracker:CreateSettingsMenu()
             default = false,
         },
         [10] = {
-            type = "divider",
+            type = "checkbox",
+            name = "Show Average Crit Damage",
+            tooltip =
+            "Show average crit damage calculated from combat data. Early readings may exceed the 125% cap or seem inaccurate due to small sample size - accuracy improves with more combat data.",
+            getFunc = function() return self.savedVars.showCritDmg end,
+            setFunc = function(value)
+                self.savedVars.showCritDmg = value
+                self:UpdateDisplay()
+            end,
+            default = false,
         },
         [11] = {
+            type = "divider",
+        },
+        [12] = {
             type = "checkbox",
             name = "Enable Debug Notifications",
             getFunc = function() return self.savedVars.showNotifications end,
