@@ -7,8 +7,3 @@
 
 CritTracker.xml
 CritTracker.lua
-
-Libs/LibAddonMenu-2.0/LibAddonMenu-2.0.lua
-Libs/LibAddonMenu-2.0/controls/panel.lua
-Libs/LibAddonMenu-2.0/controls/submenu.lua
-Libs/LibAddonMenu-2.0/controls/checkbox.luaa

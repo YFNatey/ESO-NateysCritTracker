@@ -17,6 +17,7 @@ CritTracker.normalCount = 0
 CritTracker.totalCritDamage = 0
 CritTracker.totalNormalDamage = 0
 CritTracker.inCombat = false
+CritTracker.delay = false
 CritTracker.critMultiplier = 0
 CritTracker.critDamagePercent = 0
 
@@ -52,8 +53,14 @@ function CritTracker:OnCombatStateChanged(inCombat)
     else
         self.inCombat = false
         self:DebugPrint("Combat Ended")
-        self:DebugPrint("Updating Character sheet crit percentage")
-        self:UpdateDisplay()
+
+        -- Delay to let buffs expire before reading character sheet
+        self.delay = true
+        zo_callLater(function()
+            self.delay = false
+            self:DebugPrint("Updating Character sheet crit percentage")
+            self:UpdateDisplay()
+        end, 3000)
     end
 end
 
@@ -78,7 +85,7 @@ function CritTracker:OnCombatEvent(eventCode, result, isError, abilityName, abil
             self.totalNormalDamage = self.totalNormalDamage + hitValue
         end
     end
-    if self.inCombat then
+    if self.inCombat and not self.delay then
         self:UpdateDisplay()
     end
 end
