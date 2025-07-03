@@ -6,8 +6,8 @@
 ## ConsoleDependsOn: LibAddonMenu-2.0
 ## ConsoleDependsOn: LibHarvensAddonSettings
 
-BossFightContribution.xml
-BossFightContribution.lua
+CritTracker.xml
+CritTracker.lua
 
 Libs/LibAddonMenu-2.0/LibAddonMenu-2.0.lua
 Libs/LibAddonMenu-2.0/controls/panel.lua
