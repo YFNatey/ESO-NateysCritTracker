@@ -3,7 +3,7 @@ local defaults = {
     labelPosX = 560,
     labelPosY = 20,
     showNotifications = false,
-    simpleMode = false,
+    simpleMode = true,
     showCritDmg = true
 }
 
@@ -153,7 +153,7 @@ local function Initialize()
             labelPosX = 560,
             labelPosY = 20,
             showNotifications = false,
-            simpleMode = false,
+            simpleMode = true,
             showCritDmg = true
         }
     )
