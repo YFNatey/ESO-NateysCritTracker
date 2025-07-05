@@ -11,6 +11,7 @@ local defaults = {
 CritTracker = {}
 local ADDON_NAME = "CritTracker"
 
+
 CritTracker.savedVars = nil
 CritTracker.playerDamage = 0
 CritTracker.critCount = 0
