@@ -6,10 +6,13 @@ local defaults = {
     simpleMode = true,
     showCritDmg = true,
     fontStyle = "bold"
+    showCritDmg = true,
+    fontStyle = "bold"
 }
 
 CritTracker = {}
 local ADDON_NAME = "CritTracker"
+
 
 CritTracker.savedVars = nil
 CritTracker.playerDamage = 0
