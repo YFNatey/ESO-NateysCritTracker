@@ -5,9 +5,7 @@ local defaults = {
     showNotifications = false,
     simpleMode = true,
     showCritDmg = true,
-    fontStyle = "bold"
-    showCritDmg = true,
-    fontStyle = "bold"
+    fontStyle = "bold",
 }
 
 CritTracker = {}
