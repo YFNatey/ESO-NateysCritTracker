@@ -4,7 +4,8 @@ local defaults = {
     labelPosY = 20,
     showNotifications = false,
     simpleMode = true,
-    showCritDmg = true
+    showCritDmg = true,
+    fontStyle = "bold"
 }
 
 CritTracker = {}
@@ -20,6 +21,11 @@ CritTracker.inCombat = false
 CritTracker.delay = false
 CritTracker.critMultiplier = 0
 CritTracker.critDamagePercent = 0
+CritTracker.fightCritCount = 0
+CritTracker.fightNormalCount = 0
+CritTracker.fightTotalCritDamage = 0
+CritTracker.fightTotalNormalDamage = 0
+CritTracker.fightMaxCrit = nil
 
 --=============================================================================
 -- DEBUG HELPER
@@ -44,22 +50,29 @@ function CritTracker:GetCharSheetCritChance()
 end
 
 --=============================================================================
--- COMBAT SUMMARY
+-- PER COMBAT SUMMARY
 --=============================================================================
 function CritTracker:PrintCombatSummary()
-    local totalHits = self.critCount + self.normalCount
+    local totalHits = self.fightCritCount + self.fightNormalCount
     if totalHits > 0 then
-        local critRate = (self.critCount / totalHits) * 100
-        local avgCrit = self.critCount > 0 and (self.totalCritDamage / self.critCount) or 0
-        local avgNormal = self.normalCount > 0 and (self.totalNormalDamage / self.normalCount) or 0
+        local critRate = (self.fightCritCount / totalHits) * 100
+        local avgCrit = self.fightCritCount > 0 and (self.fightTotalCritDamage / self.fightCritCount) or 0
+        local avgNormal = self.fightNormalCount > 0 and (self.fightTotalNormalDamage / self.fightNormalCount) or 0
+
+        local currentMultiplier = avgNormal > 0 and (avgCrit / avgNormal) or 0
+        local currentCritDamagePercent = currentMultiplier > 0 and ((currentMultiplier - 1) * 100) or 0
 
         self:DebugPrint("=== Combat Summary ===")
-        self:DebugPrint(string.format("Total Hits: %d (%d crits, %d normal)", totalHits, self.critCount, self
-        .normalCount))
-        self:DebugPrint(string.format("Effective Crit: %.1f%% (vs %.1f%% Base Crit)", critRate,
-            self:GetCharSheetCritChance()))
-        self:DebugPrint(string.format("Avg DMG: %.0f normal, %.0f crit (%.2fx multiplier)", avgNormal, avgCrit,
-            self.critMultiplier))
+        self:DebugPrint(string.format("Total Hits: %d (%d crits, %d normal)", totalHits, self.fightCritCount, self
+            .fightNormalCount))
+        if self.fightMaxCrit then
+            self.fightMaxCrit = math.max(self.fightMaxCrit, critRate)
+            self:DebugPrint(string.format("Crit Rate: %.1f%% (Max: %.1f%%)", critRate, self.fightMaxCrit))
+        else
+            self:DebugPrint(string.format("Crit Rate: %.1f%%", critRate))
+        end
+        self:DebugPrint(string.format("Avg Crit DMG: %.0f crit, %.0f normal (+%.0f%% / %.2fx)", avgCrit, avgNormal,
+            currentCritDamagePercent, currentMultiplier))
     end
 end
 
@@ -69,7 +82,12 @@ end
 function CritTracker:OnCombatStateChanged(inCombat)
     if inCombat then
         self.inCombat = true
-        self:DebugPrint("Combat Started")
+        self.fightCritCount = 0
+        self.fightNormalCount = 0
+        self.fightTotalCritDamage = 0
+        self.fightTotalNormalDamage = 0
+        self.fightMaxCrit = nil
+        self.fightMeanCrit = nil
     else
         self.inCombat = false
         self:DebugPrint("Combat Ended")
@@ -84,7 +102,6 @@ function CritTracker:OnCombatStateChanged(inCombat)
         self.delay = true
         zo_callLater(function()
             self.delay = false
-            self:DebugPrint("Updating Character sheet crit percentage")
             self:UpdateDisplay()
         end, 7000)
     end
@@ -104,9 +121,13 @@ function CritTracker:OnCombatEvent(eventCode, result, isError, abilityName, abil
         if result == ACTION_RESULT_CRITICAL_DAMAGE or result == ACTION_RESULT_DOT_TICK_CRITICAL then
             self.critCount = self.critCount + 1
             self.totalCritDamage = self.totalCritDamage + hitValue
+            self.fightCritCount = self.fightCritCount + 1
+            self.fightTotalCritDamage = self.fightTotalCritDamage + hitValue
         elseif result == ACTION_RESULT_DAMAGE or result == ACTION_RESULT_DOT_TICK then
             self.normalCount = self.normalCount + 1
             self.totalNormalDamage = self.totalNormalDamage + hitValue
+            self.fightNormalCount = self.fightNormalCount + 1
+            self.fightTotalNormalDamage = self.fightTotalNormalDamage + hitValue
         end
     end
     if self.inCombat and not self.delay then
@@ -124,10 +145,13 @@ function CritTracker:UpdateDisplay()
     if totalHits == 0 then
         -- Show stat sheet info when no combat data
         if self.savedVars.simpleMode then
-            local line1Text = string.format("Effective: %.1f%%", charSheet)
+            local line1Text = string.format("%.1f%%", charSheet)
             line1_CritInfo:SetText(line1Text)
             line2_CritDamage:SetText("") -- Clear second line in simple mode
         else
+            if self.savedVars.simpleMode then
+                local line1Text = string.format("%.1f%%", charSheet)
+            end
             local line1Text = string.format("Base: %.1f%%", charSheet)
             line1_CritInfo:SetText(line1Text)
             line2_CritDamage:SetText("")
@@ -136,7 +160,7 @@ function CritTracker:UpdateDisplay()
     end
 
     -- Crit rate
-    local activeCritRate = (self.critCount / totalHits) * 100
+    local critRate = (self.critCount / totalHits) * 100
 
     -- Calculate average crit damage vs normal damage
     local avgCritDamage = self.critCount > 0 and (self.totalCritDamage / self.critCount) or 0
@@ -144,20 +168,27 @@ function CritTracker:UpdateDisplay()
     self.critMultiplier = avgNormalDamage > 0 and (avgCritDamage / avgNormalDamage) or 0
     self.critDamagePercent = self.critMultiplier > 0 and ((self.critMultiplier - 1) * 100) or 0
 
+    if totalHits >= 4 then
+        if not self.fightMaxCrit or critRate > self.fightMaxCrit then
+            self.fightMaxCrit = critRate
+        end
+    end
+
+
     -- Simple Mode
     if self.savedVars.simpleMode then
-        local line1Text = string.format("Effective: %.1f%%", activeCritRate)
+        local line1Text = string.format("%.1f%%", critRate)
         if self.savedVars.showCritDmg then
-            line1Text = string.format("Effective: %.1f%% • Dmg: +%.0f%%", activeCritRate, self.critDamagePercent)
+            line1Text = string.format("%.1f%% • Dmg: %.0f%%", critRate, self.critDamagePercent)
         end
         line1_CritInfo:SetText(line1Text)
         line2_CritDamage:SetText("")
     else
         local line1Text = string.format("Effective: %.1f%% • Base: %.1f%%",
-            activeCritRate, charSheet)
+            critRate, charSheet)
         local line2Text = ""
         if self.savedVars.showCritDmg then
-            line2Text = string.format("Average Crit Damage: +%.0f%%", self.critDamagePercent)
+            line2Text = string.format("Average Crit Damage: %.0f%%", self.critDamagePercent)
         end
         line1_CritInfo:SetText(line1Text)
         line2_CritDamage:SetText(line2Text)
@@ -217,7 +248,7 @@ function CritTracker:UpdateLabelSettings()
 
     for i, label in ipairs(labels) do
         if label then
-            label:SetFont(string.format("$(BOLD_FONT)|%d|soft-shadow-thick", fontSize))
+            label:SetFont(string.format("$(CHAT_FONT)|%d|soft-shadow-thick", fontSize))
             label:ClearAnchors()
             local yOffset = posY + (i - 1) * 30
             label:SetAnchor(TOPLEFT, GuiRoot, TOPLEFT, posX, yOffset)
@@ -297,7 +328,7 @@ function CritTracker:CreateSettingsMenu()
         },
         [4] = {
             type = "description",
-            text = "Adjust UI Position and Size"
+            text = "Adjust UI"
         },
         [5] = {
             type = "slider",
@@ -355,7 +386,7 @@ function CritTracker:CreateSettingsMenu()
             type = "checkbox",
             name = "Show Average Crit Damage",
             tooltip =
-            "Show average crit damage calculated from combat data. Early readings may exceed the 125% cap or seem inaccurate due to small sample size - accuracy improves with more combat data.",
+            "Early readings may exceed the 125% cap or seem inaccurate due to small sample size - accuracy improves with more combat data.",
             getFunc = function() return self.savedVars.showCritDmg end,
             setFunc = function(value)
                 self.savedVars.showCritDmg = value
@@ -368,7 +399,7 @@ function CritTracker:CreateSettingsMenu()
         },
         [12] = {
             type = "checkbox",
-            name = "Enable Debug Notifications",
+            name = "Show Combat Summary",
             getFunc = function() return self.savedVars.showNotifications end,
             setFunc = function(value) self.savedVars.showNotifications = value end,
             default = false,
