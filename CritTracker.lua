@@ -3,7 +3,7 @@ local defaults = {
     labelPosX = 560,
     labelPosY = 20,
     showNotifications = false,
-    simpleMode = false,
+    simpleMode = true,
     showCritDmg = true
 }
 
@@ -44,6 +44,26 @@ function CritTracker:GetCharSheetCritChance()
 end
 
 --=============================================================================
+-- COMBAT SUMMARY
+--=============================================================================
+function CritTracker:PrintCombatSummary()
+    local totalHits = self.critCount + self.normalCount
+    if totalHits > 0 then
+        local critRate = (self.critCount / totalHits) * 100
+        local avgCrit = self.critCount > 0 and (self.totalCritDamage / self.critCount) or 0
+        local avgNormal = self.normalCount > 0 and (self.totalNormalDamage / self.normalCount) or 0
+
+        self:DebugPrint("=== Combat Summary ===")
+        self:DebugPrint(string.format("Total Hits: %d (%d crits, %d normal)", totalHits, self.critCount, self
+        .normalCount))
+        self:DebugPrint(string.format("Effective Crit: %.1f%% (vs %.1f%% Base Crit)", critRate,
+            self:GetCharSheetCritChance()))
+        self:DebugPrint(string.format("Avg DMG: %.0f normal, %.0f crit (%.2fx multiplier)", avgNormal, avgCrit,
+            self.critMultiplier))
+    end
+end
+
+--=============================================================================
 -- RESET VARIABLES
 --=============================================================================
 function CritTracker:OnCombatStateChanged(inCombat)
@@ -54,13 +74,19 @@ function CritTracker:OnCombatStateChanged(inCombat)
         self.inCombat = false
         self:DebugPrint("Combat Ended")
 
+
+        -- Show summary only at end
+        if self.savedVars.showNotifications then
+            self:PrintCombatSummary()
+        end
+
         -- Delay to let buffs expire before reading character sheet
         self.delay = true
         zo_callLater(function()
             self.delay = false
             self:DebugPrint("Updating Character sheet crit percentage")
             self:UpdateDisplay()
-        end, 3000)
+        end, 7000)
     end
 end
 
@@ -76,12 +102,10 @@ function CritTracker:OnCombatEvent(eventCode, result, isError, abilityName, abil
         self.playerDamage = self.playerDamage + hitValue
 
         if result == ACTION_RESULT_CRITICAL_DAMAGE or result == ACTION_RESULT_DOT_TICK_CRITICAL then
-            self:DebugPrint("CRITICAL hit for " .. hitValue)
             self.critCount = self.critCount + 1
             self.totalCritDamage = self.totalCritDamage + hitValue
         elseif result == ACTION_RESULT_DAMAGE or result == ACTION_RESULT_DOT_TICK then
             self.normalCount = self.normalCount + 1
-            self:DebugPrint("NORMAL hit for " .. hitValue)
             self.totalNormalDamage = self.totalNormalDamage + hitValue
         end
     end
@@ -100,11 +124,11 @@ function CritTracker:UpdateDisplay()
     if totalHits == 0 then
         -- Show stat sheet info when no combat data
         if self.savedVars.simpleMode then
-            local line1Text = string.format("Crit: %.1f%%", charSheet)
+            local line1Text = string.format("Effective: %.1f%%", charSheet)
             line1_CritInfo:SetText(line1Text)
             line2_CritDamage:SetText("") -- Clear second line in simple mode
         else
-            local line1Text = string.format("Character Sheet: %.1f%%", charSheet)
+            local line1Text = string.format("Base: %.1f%%", charSheet)
             line1_CritInfo:SetText(line1Text)
             line2_CritDamage:SetText("")
         end
@@ -122,15 +146,15 @@ function CritTracker:UpdateDisplay()
 
     -- Simple Mode
     if self.savedVars.simpleMode then
-        local line1Text = string.format("Crit: %.1f%%", activeCritRate)
+        local line1Text = string.format("Effective: %.1f%%", activeCritRate)
         if self.savedVars.showCritDmg then
-            line1Text = string.format("Crit: %.1f%% • Dmg: +%.0f%%", activeCritRate, self.critDamagePercent)
+            line1Text = string.format("Effective: %.1f%% • Dmg: +%.0f%%", activeCritRate, self.critDamagePercent)
         end
         line1_CritInfo:SetText(line1Text)
         line2_CritDamage:SetText("")
     else
-        local line1Text = string.format("Character Sheet: %.1f%% • Active Crit: %.1f%%",
-            charSheet, activeCritRate)
+        local line1Text = string.format("Effective: %.1f%% • Base: %.1f%%",
+            activeCritRate, charSheet)
         local line2Text = ""
         if self.savedVars.showCritDmg then
             line2Text = string.format("Average Crit Damage: +%.0f%%", self.critDamagePercent)
@@ -153,7 +177,7 @@ local function Initialize()
             labelPosX = 560,
             labelPosY = 20,
             showNotifications = false,
-            simpleMode = false,
+            simpleMode = true,
             showCritDmg = true
         }
     )
@@ -193,7 +217,7 @@ function CritTracker:UpdateLabelSettings()
 
     for i, label in ipairs(labels) do
         if label then
-            label:SetFont(string.format("$(BOLD_FONT)|%d", fontSize))
+            label:SetFont(string.format("$(BOLD_FONT)|%d|soft-shadow-thick", fontSize))
             label:ClearAnchors()
             local yOffset = posY + (i - 1) * 30
             label:SetAnchor(TOPLEFT, GuiRoot, TOPLEFT, posX, yOffset)
@@ -292,7 +316,7 @@ function CritTracker:CreateSettingsMenu()
             type = "slider",
             name = "Label X Position",
             min = 0,
-            max = 1920,
+            max = 5000,
             step = 10,
             getFunc = function() return self.savedVars.labelPosX end,
             setFunc = function(value)
@@ -305,7 +329,7 @@ function CritTracker:CreateSettingsMenu()
             type = "slider",
             name = "Label Y Position",
             min = 0,
-            max = 1080,
+            max = 7000,
             step = 10,
             getFunc = function() return self.savedVars.labelPosY end,
             setFunc = function(value)
