@@ -1,15 +1,13 @@
+## This Add-on is not created by,  affiliated with or sponsored by ZeniMax Media Inc. or its affiliates.
+## The Elder Scrolls® and related logos are registered trademarks or trademarks of ZeniMax Media Inc.
+## in the United States and/or other countries. All rights reserved.
+
 ## Title: Crit Tracker
 ## Author: YFNatey
 ## Version: 1.0
 ## APIVersion: 101046
 ## SavedVariables: CritTracker_SavedVars
 ## ConsoleDependsOn: LibAddonMenu-2.0
-## ConsoleDependsOn: LibHarvensAddonSettings
 
 CritTracker.xml
 CritTracker.lua
-
-Libs/LibAddonMenu-2.0/LibAddonMenu-2.0.lua
-Libs/LibAddonMenu-2.0/controls/panel.lua
-Libs/LibAddonMenu-2.0/controls/submenu.lua
-Libs/LibAddonMenu-2.0/controls/checkbox.lua

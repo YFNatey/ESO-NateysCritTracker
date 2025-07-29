@@ -1,16 +1,19 @@
+--[[TODO:
+Add Copyright disclaimers
+Add font styles
+Add crit tracking in exe
+--]]
 local defaults = {
     fontSize = 18,
     labelPosX = 560,
     labelPosY = 20,
     showNotifications = false,
     simpleMode = true,
-    showCritDmg = true,
-    fontStyle = "bold"
+    showCritDmg = true
 }
 
 CritTracker = {}
 local ADDON_NAME = "CritTracker"
-
 
 CritTracker.savedVars = nil
 CritTracker.playerDamage = 0
@@ -63,7 +66,7 @@ function CritTracker:PrintCombatSummary()
         local currentMultiplier = avgNormal > 0 and (avgCrit / avgNormal) or 0
         local currentCritDamagePercent = currentMultiplier > 0 and ((currentMultiplier - 1) * 100) or 0
 
-        self:DebugPrint("=== Combat Summary ===")
+        self:DebugPrint("--Combat Summary--")
         self:DebugPrint(string.format("Total Hits: %d (%d crits, %d normal)", totalHits, self.fightCritCount, self
             .fightNormalCount))
         if self.fightMaxCrit then
@@ -200,18 +203,11 @@ end
 -- INITIALIZE
 --=============================================================================
 local function Initialize()
-    CritTracker.savedVars = ZO_SavedVars:NewAccountWide(
+    CritTracker.savedVars = ZO_SavedVars:NewCharacterIdSettings(
         "CritTracker_SavedVars",
         1,
         nil,
-        {
-            fontSize = 18,
-            labelPosX = 560,
-            labelPosY = 20,
-            showNotifications = false,
-            simpleMode = true,
-            showCritDmg = true
-        }
+        defaults
     )
 
     local labels = CritTracker:GetLabels()
@@ -400,7 +396,7 @@ function CritTracker:CreateSettingsMenu()
         },
         [12] = {
             type = "checkbox",
-            name = "Show Combat Summary",
+            name = "Show Combat Stats",
             getFunc = function() return self.savedVars.showNotifications end,
             setFunc = function(value) self.savedVars.showNotifications = value end,
             default = false,
