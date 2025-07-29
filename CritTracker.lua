@@ -32,15 +32,6 @@ CritTracker.fightTotalNormalDamage = 0
 CritTracker.fightMaxCrit = nil
 
 --=============================================================================
--- DEBUG HELPER
---=============================================================================
-function CritTracker:DebugPrint(message)
-    if self.savedVars and self.savedVars.showNotifications then
-        d(message)
-    end
-end
-
---=============================================================================
 -- GET STAT SHEET CRIT CHANCE
 --=============================================================================
 function CritTracker:GetCharSheetCritChance()
@@ -196,6 +187,61 @@ function CritTracker:UpdateDisplay()
         end
         line1_CritInfo:SetText(line1Text)
         line2_CritDamage:SetText(line2Text)
+    end
+end
+
+--=============================================================================
+-- COMBAT SUMMARY
+--=============================================================================
+function CritTracker:PrintCombatSummary()
+    local totalHits = self.fightCritCount + self.fightNormalCount
+    if totalHits > 0 then
+        local critRate = (self.fightCritCount / totalHits) * 100
+        local avgCrit = self.fightCritCount > 0 and (self.fightTotalCritDamage / self.fightCritCount) or 0
+        local avgNormal = self.fightNormalCount > 0 and (self.fightTotalNormalDamage / self.fightNormalCount) or 0
+
+        local currentMultiplier = avgNormal > 0 and (avgCrit / avgNormal) or 0
+        local currentCritDamagePercent = currentMultiplier > 0 and ((currentMultiplier - 1) * 100) or 0
+
+        self:DebugPrint("=== Combat Summary ===")
+        self:DebugPrint(string.format("Total Hits: %d (%d crits, %d normal)", totalHits, self.fightCritCount, self
+            .fightNormalCount))
+        if self.fightMaxCrit then
+            self.fightMaxCrit = math.max(self.fightMaxCrit, critRate)
+            self:DebugPrint(string.format("Crit Rate: %.1f%% (Max: %.1f%%)", critRate, self.fightMaxCrit))
+        else
+            self:DebugPrint(string.format("Crit Rate: %.1f%%", critRate))
+        end
+        self:DebugPrint(string.format("Avg Crit DMG: %.0f crit, %.0f normal (+%.0f%% / %.2fx)", avgCrit, avgNormal,
+            currentCritDamagePercent, currentMultiplier))
+    end
+end
+
+--=============================================================================
+-- RESET VARIABLES
+--=============================================================================
+function CritTracker:OnCombatStateChanged(inCombat)
+    if inCombat then
+        self.inCombat = true
+        self.fightCritCount = 0
+        self.fightNormalCount = 0
+        self.fightTotalCritDamage = 0
+        self.fightTotalNormalDamage = 0
+        self.fightMaxCrit = nil
+        self.fightMeanCrit = nil
+    else
+        self.inCombat = false
+        self:DebugPrint("Combat Ended")
+        if self.savedVars.showNotifications then
+            self:PrintCombatSummary()
+        end
+
+        -- Delay to let buffs expire before reading character sheet
+        self.delay = true
+        zo_callLater(function()
+            self.delay = false
+            self:UpdateDisplay()
+        end, 7000)
     end
 end
 
@@ -422,3 +468,12 @@ local function OnAddOnLoaded(event, addonName)
 end
 
 EVENT_MANAGER:RegisterForEvent(ADDON_NAME, EVENT_ADD_ON_LOADED, OnAddOnLoaded)
+
+--=============================================================================
+-- DEBUG HELPER
+--=============================================================================
+function CritTracker:DebugPrint(message)
+    if self.savedVars and self.savedVars.showNotifications then
+        d(message)
+    end
+end
