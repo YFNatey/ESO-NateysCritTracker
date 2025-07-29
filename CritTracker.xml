@@ -22,6 +22,15 @@
                     drawLevel="6">
                     <Dimensions x="900" y="40" />
                 </Label>
+                <Label
+                    name="line3_ExecutePhase"
+                    font="$(BOLD_FONT)|24"
+                    color="FFFFFF"
+                    text=""
+                    hidden="true"
+                    drawLevel="6">
+                    <Dimensions x="900" y="40" />
+                </Label>
             </Controls>
         </TopLevelControl>
     </Controls>
