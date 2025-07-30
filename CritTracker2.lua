@@ -30,7 +30,7 @@ CritTracker.healthCheckInterval = 500
 
 CritTracker.frontBarCritChance = 0
 CritTracker.backBarCritChance = 0
-CritTracker.currentActiveBar = 1 -- 1 for front, 2 for back
+CritTracker.currentActiveBar = 1     -- 1 for front, 2 for back
 CritTracker.lastBarUpdate = 0
 CritTracker.barUpdateInterval = 1000 -- Update every 1 second to avoid spam
 
@@ -207,10 +207,89 @@ end
 --=============================================================================
 -- GET STAT SHEET CRIT CHANCE
 --=============================================================================
+function CritTracker:OnActiveWeaponPairChanged(eventCode, activeWeaponPair, locked)
+    -- Don't update if the weapon pair is locked (during switching animation)
+    if locked then
+        self:DebugPrint("Weapon pair locked, skipping update")
+        return
+    end
+
+    -- Log the bar change attempt
+    self:DebugPrint(string.format("Bar swap detected: %d -> %d", self.currentActiveBar, activeWeaponPair))
+
+    -- Use a delayed approach to ensure the bar swap is complete
+    -- This mimics the successful manual capture timing
+    EVENT_MANAGER:RegisterForUpdate("CritTracker_AutoBarCapture", 250, function()
+        EVENT_MANAGER:UnregisterForUpdate("CritTracker_AutoBarCapture")
+
+        -- Verify the bar swap actually occurred
+        local currentBar = GetActiveWeaponPairInfo()
+        if currentBar == activeWeaponPair then
+            -- Call the working ForceBarCapture function
+            local capturedCrit = self:ForceBarCapture()
+            self:DebugPrint(string.format("Auto-captured bar %d: %.1f%%", currentBar, capturedCrit))
+        else
+            self:DebugPrint(string.format("Bar swap verification failed: expected %d, got %d",
+                activeWeaponPair, currentBar))
+        end
+    end)
+end
+
+function CritTracker:ForceBarCapture()
+    local currentBar = GetActiveWeaponPairInfo()
+    local currentCritChance = self:GetCharSheetCritChance()
+
+
+
+    if currentBar == 1 then
+        self.frontBarCritChance = currentCritChance
+    elseif currentBar == 2 then
+        self.backBarCritChance = currentCritChance
+    end
+
+    self.currentActiveBar = currentBar
+    self:UpdateDisplay()
+
+    return currentCritChance
+end
+
 function CritTracker:GetCharSheetCritChance()
     local critRating = GetPlayerStat(STAT_CRITICAL_STRIKE)
     local critChance = (critRating / 219)
     return math.min(critChance, 100)
+end
+
+function CritTracker:GetFormattedBarCritChances()
+    -- Show current bar indicator if we have both bars captured
+    local frontText = self.frontBarCritChance > 0 and string.format("%.1f%%", self.frontBarCritChance) or "-.-%"
+    local backText = self.backBarCritChance > 0 and string.format("%.1f%%", self.backBarCritChance) or "-.-%"
+
+    -- Add current bar indicator (optional - remove if you don't want it)
+    if self.currentActiveBar == 1 and self.frontBarCritChance > 0 then
+        frontText = "[" .. frontText .. "]" -- Brackets around active bar
+    elseif self.currentActiveBar == 2 and self.backBarCritChance > 0 then
+        backText = "[" .. backText .. "]"   -- Brackets around active bar
+    end
+
+    return string.format("%s | %s", frontText, backText)
+end
+
+function CritTracker:ManualBarCapture()
+    local currentBar = GetActiveWeaponPairInfo()
+    local currentCritChance = self:GetCharSheetCritChance()
+
+    self:DebugPrint(string.format("Manually capturing bar %d with %.1f%% crit", currentBar, currentCritChance))
+
+    if currentBar == 1 then
+        self.frontBarCritChance = currentCritChance
+        self:DebugPrint(string.format("Manually captured front bar: %.1f%%", currentCritChance))
+    elseif currentBar == 2 then
+        self.backBarCritChance = currentCritChance
+        self:DebugPrint(string.format("Manually captured back bar: %.1f%%", currentCritChance))
+    end
+
+    self.currentActiveBar = currentBar -- ADD THIS CRITICAL LINE
+    self:UpdateDisplay()
 end
 
 --=============================================================================
@@ -370,16 +449,16 @@ function CritTracker:UpdateDisplay()
 
     -- Check if we should only show during execute phase
     if self.savedVars.showExecutePhaseOnly and not self.inExecutePhase then
-        line1_CritInfo:SetText("")
-        line2_CritDamage:SetText("")
-        line3_ExecutePhase:SetText("")
+        ct2_line1CritInfo:SetText("")
+        ct2_line2_CritDamage:SetText("")
+        ct2_line3_ExecutePhase:SetText("")
         return
     end
 
     -- Check if we should hide main lines during execute phase
     if self.savedVars.hideMainLinesInExecute and self.inExecutePhase then
-        line1_CritInfo:SetText("")
-        line2_CritDamage:SetText("")
+        ct2_line1CritInfo:SetText("")
+        ct2_line2_CritDamage:SetText("")
         -- Only show execute phase line
         if self.savedVars.enableExecuteTracking then
             local executeHits = self.executePhaseCritCount + self.executePhaseNormalCount
@@ -391,17 +470,17 @@ function CritTracker:UpdateDisplay()
                 if self.savedVars.showCritDmg then
                     executeText = string.format("Execute: %.1f%% • Dmg: %.0f%%", executeCritRate, executeCritDamage)
                 end
-                line3_ExecutePhase:SetText(executeText)
+                ct2_line3_ExecutePhase:SetText(executeText)
             else
-                line3_ExecutePhase:SetText("")
+                ct2_line3_ExecutePhase:SetText("")
             end
         else
-            line3_ExecutePhase:SetText("")
+            ct2_line3_ExecutePhase:SetText("")
         end
 
         -- Apply execute color to the execute line
         local executeColor = self.savedVars.executePhaseColor
-        line3_ExecutePhase:SetColor(executeColor[1], executeColor[2], executeColor[3], executeColor[4])
+        ct2_line3_ExecutePhase:SetColor(executeColor[1], executeColor[2], executeColor[3], executeColor[4])
         return
     end
 
@@ -409,14 +488,16 @@ function CritTracker:UpdateDisplay()
         -- Show stat sheet info when no combat data
         if self.savedVars.simpleMode then
             local line1Text = string.format("%.1f%%", charSheet)
-            line1_CritInfo:SetText(line1Text)
-            line2_CritDamage:SetText("")
-            line3_ExecutePhase:SetText("")
+            ct2_line1CritInfo:SetText(line1Text)
+            ct2_line2_CritDamage:SetText("")
+            ct2_line3_ExecutePhase:SetText("")
         else
-            local line1Text = string.format("Base: %.1f%%", charSheet)
-            line1_CritInfo:SetText(line1Text)
-            line2_CritDamage:SetText("")
-            line3_ExecutePhase:SetText("")
+            -- MODIFIED: Show dual bar format in verbose mode
+            local barCritText = self:GetFormattedBarCritChances()
+            local line1Text = string.format("Effective: %.1f%% • Base: %s", charSheet, barCritText)
+            ct2_line1CritInfo:SetText(line1Text)
+            ct2_line2_CritDamage:SetText("")
+            ct2_line3_ExecutePhase:SetText("")
         end
         return
     end
@@ -452,8 +533,8 @@ function CritTracker:UpdateDisplay()
                 critRate, critDamageHex, self.critDamagePercent)
         end
         line1Text = line1Text .. executePhaseText
-        line1_CritInfo:SetText(line1Text)
-        line2_CritDamage:SetText("")
+        ct2_line1CritInfo:SetText(line1Text)
+        ct2_line2_CritDamage:SetText("")
 
         -- Execute phase line (simple mode)
         if self.savedVars.enableExecuteTracking and self.inExecutePhase then
@@ -467,22 +548,23 @@ function CritTracker:UpdateDisplay()
                     executeText = string.format("Exe: |c%s%.1f%%|r • Dmg: %.0f%%|r",
                         executeHex, executeCritRate, executeCritDamage)
                 end
-                line3_ExecutePhase:SetText(executeText)
+                ct2_line3_ExecutePhase:SetText(executeText)
             end
         else
-            line3_ExecutePhase:SetText("")
+            ct2_line3_ExecutePhase:SetText("")
         end
     else
-        -- Detailed mode
-        local line1Text = string.format("Effective: %.1f%% • Base: %.1f%%", critRate, charSheet)
+        -- FIXED: Detailed mode with dual bar display (NOW INCLUDES COMBAT DATA)
+        local barCritText = self:GetFormattedBarCritChances()
+        local line1Text = string.format("Effective: %.1f%% • Base: %s", critRate, barCritText)
         local line2Text = ""
         if self.savedVars.showCritDmg then
             line2Text = string.format("Average Crit Damage: %.0f%%", self.critDamagePercent)
         end
-        line1_CritInfo:SetText(line1Text)
-        line2_CritDamage:SetText(line2Text)
+        ct2_line1CritInfo:SetText(line1Text)
+        ct2_line2_CritDamage:SetText(line2Text)
 
-        -- Verbose
+        -- Verbose execute phase
         if self.savedVars.enableExecuteTracking then
             if self.inExecutePhase then
                 local executeHits = self.executePhaseCritCount + self.executePhaseNormalCount
@@ -491,15 +573,15 @@ function CritTracker:UpdateDisplay()
                     if self.savedVars.showCritDmg and executeCritDamage > 0 then
                         executeText = executeText .. string.format(" • %.0f%% dmg", executeCritDamage)
                     end
-                    line3_ExecutePhase:SetText(executeText)
+                    ct2_line3_ExecutePhase:SetText(executeText)
                 else
-                    line3_ExecutePhase:SetText("")
+                    ct2_line3_ExecutePhase:SetText("")
                 end
             else
-                line3_ExecutePhase:SetText("")
+                ct2_line3_ExecutePhase:SetText("")
             end
         else
-            line3_ExecutePhase:SetText("")
+            ct2_line3_ExecutePhase:SetText("")
         end
     end
 
@@ -509,11 +591,11 @@ function CritTracker:UpdateDisplay()
     -- Apply execute color only to the execute line (line3) when in execute phase
     if self.inExecutePhase and self.savedVars.enableExecuteTracking then
         local executeColor = self.savedVars.executePhaseColor
-        line3_ExecutePhase:SetColor(executeColor[1], executeColor[2], executeColor[3], executeColor[4])
+        ct2_line3_ExecutePhase:SetColor(executeColor[1], executeColor[2], executeColor[3], executeColor[4])
     else
         -- Reset execute line color when not in execute phase
         local defaultColor = self.savedVars.critRateColor
-        line3_ExecutePhase:SetColor(defaultColor[1], defaultColor[2], defaultColor[3], defaultColor[4])
+        ct2_line3_ExecutePhase:SetColor(defaultColor[1], defaultColor[2], defaultColor[3], defaultColor[4])
     end
 end
 
@@ -626,9 +708,9 @@ end
 --=============================================================================
 function CritTracker:GetLabels()
     return {
-        _G["line1_CritInfo"],
-        _G["line2_CritDamage"],
-        _G["line3_ExecutePhase"]
+        _G["ct2_line1CritInfo"],
+        _G["ct2_line2_CritDamage"],
+        _G["ct2_line3_ExecutePhase"]
     }
 end
 
@@ -963,6 +1045,44 @@ end
 --=============================================================================
 -- INITIALIZE
 --=============================================================================
+function CritTracker:RegisterAdditionalBarEvents()
+    -- Trigger bar capture when combat ends (to refresh display)
+    EVENT_MANAGER:RegisterForEvent(ADDON_NAME .. "_CombatEnd", EVENT_PLAYER_COMBAT_STATE,
+        function(_, inCombat)
+            if not inCombat then
+                -- Wait for the delay period to end, then capture current bar
+                EVENT_MANAGER:RegisterForUpdate("CritTracker_PostCombat", 7500, function()
+                    EVENT_MANAGER:UnregisterForUpdate("CritTracker_PostCombat")
+                    local capturedCrit = self:ForceBarCapture()
+                    self:DebugPrint(string.format("Post-combat bar capture: %.1f%%", capturedCrit))
+                end)
+            end
+        end)
+end
+
+local function InitializeBarTracking()
+    local currentBar = GetActiveWeaponPairInfo()
+    CritTracker.currentActiveBar = currentBar
+
+    CritTracker:DebugPrint(string.format("Initialization: Starting on bar %d", currentBar))
+
+    -- Multiple initialization attempts using the proven ForceBarCapture method
+    local initAttempts = 0
+    local maxInitAttempts = 3
+
+    local function performInitCapture()
+        initAttempts = initAttempts + 1
+        local capturedCrit = CritTracker:ForceBarCapture()
+
+        if initAttempts < maxInitAttempts then
+            EVENT_MANAGER:RegisterForUpdate("CritTracker_InitRetry", 1000, performInitCapture)
+        end
+    end
+
+    -- Start the initialization sequence
+    EVENT_MANAGER:RegisterForUpdate("CritTracker_InitialCapture", 500, performInitCapture)
+end
+
 local function Initialize()
     CritTracker.savedVars = ZO_SavedVars:NewCharacterIdSettings(
         "CritTracker2_SavedVars",
@@ -982,14 +1102,60 @@ local function Initialize()
     CritTracker:ApplyFontsToLabels()
     CritTracker:ApplyColorsToLabels()
 
+    -- Register combat event
     EVENT_MANAGER:RegisterForEvent(ADDON_NAME, EVENT_COMBAT_EVENT,
         function(...) CritTracker:OnCombatEvent(...) end)
+
+    -- Register weapon pair change event with the new optimized handler
+    EVENT_MANAGER:RegisterForEvent(ADDON_NAME, EVENT_ACTIVE_WEAPON_PAIR_CHANGED,
+        function(eventCode, activeWeaponPair, locked)
+            CritTracker:OnActiveWeaponPairChanged(eventCode, activeWeaponPair, locked)
+        end)
+
+    -- Register additional bar tracking events
+    CritTracker:RegisterAdditionalBarEvents()
+
+    -- Initialize bar tracking with multiple attempts
+    InitializeBarTracking()
 
     CritTracker:CreateSettingsMenu()
     CritTracker:UpdateDisplay()
 end
 
 
+-- Optional: Add a slash command for manual bar capture (for testing)
+SLASH_COMMANDS["/critbar"] = function()
+    CritTracker:ManualBarCapture()
+    d("Manual bar capture executed")
+end
+
+-- Optional: Add a slash command to show current bar status
+SLASH_COMMANDS["/critstatus"] = function()
+    local currentBar = GetActiveWeaponPairInfo()
+    d(string.format("Current bar: %d", currentBar))
+    d(string.format("Front bar crit: %.1f%%", CritTracker.frontBarCritChance))
+    d(string.format("Back bar crit: %.1f%%", CritTracker.backBarCritChance))
+    d(string.format("Current crit: %.1f%%", CritTracker:GetCharSheetCritChance()))
+end
+
+SLASH_COMMANDS["/critbar"] = function()
+    local capturedCrit = CritTracker:ForceBarCapture() -- Use ForceBarCapture instead
+    d(string.format("Manual bar capture executed: %.1f%%", capturedCrit))
+end
+
+SLASH_COMMANDS["/critstatus"] = function()
+    local currentBar = GetActiveWeaponPairInfo()
+    local currentCrit = CritTracker:GetCharSheetCritChance()
+
+    d("=== Crit Tracker Bar Status ===")
+    d(string.format("Current active bar: %d", currentBar))
+    d(string.format("Tracked active bar: %d", CritTracker.currentActiveBar))
+    d(string.format("Current crit chance: %.1f%%", currentCrit))
+    d(string.format("Front bar stored: %.1f%%", CritTracker.frontBarCritChance))
+    d(string.format("Back bar stored: %.1f%%", CritTracker.backBarCritChance))
+    d(string.format("In combat: %s", tostring(CritTracker.inCombat)))
+    d(string.format("In delay: %s", tostring(CritTracker.delay)))
+end
 --=============================================================================
 -- EVENT MANAGERS
 --=============================================================================
