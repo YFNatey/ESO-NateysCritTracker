@@ -51,17 +51,6 @@ Access via **Settings > Addons > Crit Tracker**
 - **Show Average Crit Damage** - Display calculated crit damage bonuses
 - **Show Combat Stats** - Enable detailed post-fight summaries
 
-## Why CritTracker?
-
-### Console-First Design
-- **Lightweight performance** - Won't affect gameplay FPS
-- **Auto-updating** - Updates when you log in
-
-### Actual vs Theoretical Stats
-- **Detect overcapping**
-- **Real combat performance*
-- **Build optimization**
-
 ## Technical Details
 
 ### Calculations
