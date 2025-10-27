@@ -1,5 +1,5 @@
 CritTracker = {}
-local ADDON_NAME = "CritTracker"
+local ADDON_NAME = "CritTracker2"
 
 CritTracker.savedVars = nil
 CritTracker.playerDamage = 0
@@ -339,11 +339,6 @@ function CritTracker:OnCombatStateChanged(inCombat)
 
         -- Reset boss discovery
         self.discoveredBosses = {}
-
-        -- Fade in labels if showOnlyInCombat is enabled
-        if self.savedVars.showOnlyInCombat then
-            self:AnimateLabels(true)
-        end
     else
         self.inCombat = false
 
@@ -352,10 +347,7 @@ function CritTracker:OnCombatStateChanged(inCombat)
             self:PrintCombatSummary()
         end
 
-        -- Fade out labels if showOnlyInCombat is enabled
-        if self.savedVars.showOnlyInCombat then
-            self:AnimateLabels(false)
-        end
+
 
         -- Delay to let buffs expire before reading character sheet
         self.delay = true
@@ -436,16 +428,16 @@ function CritTracker:UpdateDisplay()
 
     -- Check if we should only show during execute phase
     if self.savedVars.showExecutePhaseOnly and not self.inExecutePhase then
-        line1_CritInfo:SetText("")
-        line2_CritDamage:SetText("")
-        line3_ExecutePhase:SetText("")
+        ct2_line1CritInfo:SetText("")
+        ct2_line2_CritDamage:SetText("")
+        ct2_line3_ExecutePhase:SetText("")
         return
     end
 
     -- Check if we should hide main lines during execute phase
     if self.savedVars.hideMainLinesInExecute and self.inExecutePhase then
-        line1_CritInfo:SetText("")
-        line2_CritDamage:SetText("")
+        ct2_line1CritInfo:SetText("")
+        ct2_line2_CritDamage:SetText("")
         -- Only show execute phase line
         if self.savedVars.enableExecuteTracking then
             local executeHits = self.executePhaseCritCount + self.executePhaseNormalCount
@@ -457,17 +449,17 @@ function CritTracker:UpdateDisplay()
                 if self.savedVars.showCritDmg then
                     executeText = string.format("Execute: %.1f%% • Dmg: %.0f%%", executeCritRate, executeCritDamage)
                 end
-                line3_ExecutePhase:SetText(executeText)
+                ct2_line3_ExecutePhase:SetText(executeText)
             else
-                line3_ExecutePhase:SetText("")
+                ct2_line3_ExecutePhase:SetText("")
             end
         else
-            line3_ExecutePhase:SetText("")
+            ct2_line3_ExecutePhase:SetText("")
         end
 
         -- Apply execute color to the execute line
         local executeColor = self.savedVars.executePhaseColor
-        line3_ExecutePhase:SetColor(executeColor[1], executeColor[2], executeColor[3], executeColor[4])
+        ct2_line3_ExecutePhase:SetColor(executeColor[1], executeColor[2], executeColor[3], executeColor[4])
         return
     end
 
@@ -475,15 +467,15 @@ function CritTracker:UpdateDisplay()
         -- Show stat sheet info when no combat data
         if self.savedVars.simpleMode then
             local line1Text = string.format("%.1f%%", charSheet)
-            line1_CritInfo:SetText(line1Text)
-            line2_CritDamage:SetText("")
-            line3_ExecutePhase:SetText("")
+            ct2_line1CritInfo:SetText(line1Text)
+            ct2_line2_CritDamage:SetText("")
+            ct2_line3_ExecutePhase:SetText("")
         else
             local barCritText = self:GetFormattedBarCritChances()
             local line1Text = string.format("Effective: %.1f%% • Base: %s", charSheet, barCritText)
-            line1_CritInfo:SetText(line1Text)
-            line2_CritDamage:SetText("")
-            line3_ExecutePhase:SetText("")
+            ct2_line1CritInfo:SetText(line1Text)
+            ct2_line2_CritDamage:SetText("")
+            ct2_line3_ExecutePhase:SetText("")
         end
         return
     end
@@ -519,8 +511,8 @@ function CritTracker:UpdateDisplay()
                 critRate, critDamageHex, self.critDamagePercent)
         end
         line1Text = line1Text .. executePhaseText
-        line1_CritInfo:SetText(line1Text)
-        line2_CritDamage:SetText("")
+        ct2_line1CritInfo:SetText(line1Text)
+        ct2_line2_CritDamage:SetText("")
 
         -- Execute phase line
         if self.savedVars.enableExecuteTracking and self.inExecutePhase then
@@ -534,10 +526,10 @@ function CritTracker:UpdateDisplay()
                     executeText = string.format("Exe: |c%s%.1f%%|r • Dmg: %.0f%%|r",
                         executeHex, executeCritRate, executeCritDamage)
                 end
-                line3_ExecutePhase:SetText(executeText)
+                ct2_line3_ExecutePhase:SetText(executeText)
             end
         else
-            line3_ExecutePhase:SetText("")
+            ct2_line3_ExecutePhase:SetText("")
         end
     else
         local barCritText = self:GetFormattedBarCritChances()
@@ -546,8 +538,8 @@ function CritTracker:UpdateDisplay()
         if self.savedVars.showCritDmg then
             line2Text = string.format("Average Crit Damage: %.0f%%", self.critDamagePercent)
         end
-        line1_CritInfo:SetText(line1Text)
-        line2_CritDamage:SetText(line2Text)
+        ct2_line1CritInfo:SetText(line1Text)
+        ct2_line2_CritDamage:SetText(line2Text)
 
         -- Verbose execute phase
         if self.savedVars.enableExecuteTracking then
@@ -558,15 +550,15 @@ function CritTracker:UpdateDisplay()
                     if self.savedVars.showCritDmg and executeCritDamage > 0 then
                         executeText = executeText .. string.format(" • %.0f%% dmg", executeCritDamage)
                     end
-                    line3_ExecutePhase:SetText(executeText)
+                    ct2_line3_ExecutePhase:SetText(executeText)
                 else
-                    line3_ExecutePhase:SetText("")
+                    ct2_line3_ExecutePhase:SetText("")
                 end
             else
-                line3_ExecutePhase:SetText("")
+                ct2_line3_ExecutePhase:SetText("")
             end
         else
-            line3_ExecutePhase:SetText("")
+            ct2_line3_ExecutePhase:SetText("")
         end
     end
 
@@ -576,11 +568,11 @@ function CritTracker:UpdateDisplay()
     -- Apply execute color only to the execute line (line3) when in execute phase
     if self.inExecutePhase and self.savedVars.enableExecuteTracking then
         local executeColor = self.savedVars.executePhaseColor
-        line3_ExecutePhase:SetColor(executeColor[1], executeColor[2], executeColor[3], executeColor[4])
+        ct2_line3_ExecutePhase:SetColor(executeColor[1], executeColor[2], executeColor[3], executeColor[4])
     else
         -- Reset execute line color when not in execute phase
         local defaultColor = self.savedVars.critRateColor
-        line3_ExecutePhase:SetColor(defaultColor[1], defaultColor[2], defaultColor[3], defaultColor[4])
+        ct2_line3_ExecutePhase:SetColor(defaultColor[1], defaultColor[2], defaultColor[3], defaultColor[4])
     end
 end
 
@@ -712,9 +704,9 @@ end
 --=============================================================================
 function CritTracker:GetLabels()
     return {
-        _G["line1_CritInfo"],
-        _G["line2_CritDamage"],
-        _G["line3_ExecutePhase"]
+        _G["ct2_line1CritInfo"],
+        _G["ct2_line2_CritDamage"],
+        _G["ct2_line3_ExecutePhase"]
     }
 end
 
@@ -809,7 +801,7 @@ function CritTracker:CreateSettingsMenu()
 
     local panelData = {
         type = "panel",
-        name = "Crit Tracker",
+        name = "Crit Tracker v2",
         author = "YFNatey",
         version = "1.1",
         registerForRefresh = true,
@@ -1104,11 +1096,6 @@ end
 function CritTracker:OnZoneChanged()
     if self.savedVars.showOnlyInCombat == "dungeon" then
         local inDungeon = IsUnitInDungeon("player")
-        if inDungeon then
-            self:AnimateLabels(true)
-        else
-            self:AnimateLabels(false)
-        end
     end
 end
 
@@ -1131,7 +1118,7 @@ end
 
 local function Initialize()
     CritTracker.savedVars = ZO_SavedVars:NewCharacterIdSettings(
-        "CritTracker_SavedVars",
+        "CritTracker2_SavedVars",
         1,
         nil,
         defaults
