@@ -1,5 +1,5 @@
 CritTracker = {}
-local ADDON_NAME = "CritTracker2"
+local ADDON_NAME = "CritTracker"
 
 CritTracker.savedVars = nil
 CritTracker.playerDamage = 0
@@ -30,9 +30,9 @@ CritTracker.healthCheckInterval = 500
 
 CritTracker.frontBarCritChance = 0
 CritTracker.backBarCritChance = 0
-CritTracker.currentActiveBar = 1     -- 1 for front, 2 for back
+CritTracker.currentActiveBar = 1
 CritTracker.lastBarUpdate = 0
-CritTracker.barUpdateInterval = 1000 -- Update every 1 second to avoid spam
+CritTracker.barUpdateInterval = 1000
 
 local defaults = {
     fontSize = 28,
@@ -41,7 +41,8 @@ local defaults = {
     showNotifications = false,
     simpleMode = true,
     showCritDmg = true,
-
+    uiVisible = true,
+    showOnlyInCombat = "always",
     -- Font
     selectedFont = "ESO_Standard",
     fontScale = 1.0,
@@ -69,8 +70,6 @@ function CritTracker:GetBossHealth()
     local totalMaxHealth = 0
     local totalCurrentHealth = 0
     local lowestHealthPercent = 100
-
-    -- First, check for target dummies
     local dummyFound = false
     local dummyUnitTags = { "reticleover", "boss1", "boss2", "boss3", "boss4", "boss5", "boss6" }
 
@@ -102,11 +101,10 @@ function CritTracker:GetBossHealth()
         end
     end
 
-    -- If no dummy found, proceed with normal boss detection
+    -- Find bosses
     if not dummyFound then
         self.dummyUnitTag = nil
 
-        -- Find bosses (existing logic)
         for _, tag in ipairs(bossUnitTags) do
             if DoesUnitExist(tag) and IsUnitAttackable(tag) then
                 local bossName = GetUnitName(tag)
@@ -121,7 +119,7 @@ function CritTracker:GetBossHealth()
             end
         end
 
-        -- Get health data from discovered bosses (existing logic)
+        -- Get health data
         for bossName, bossData in pairs(self.discoveredBosses) do
             local tag = bossData.unitTag
             if tag and DoesUnitExist(tag) and IsUnitAttackable(tag) then
@@ -129,10 +127,8 @@ function CritTracker:GetBossHealth()
                 if max and max > 0 then
                     bossData.maxHealth = max
                     bossData.currentHealth = current
-
                     totalMaxHealth = totalMaxHealth + max
                     totalCurrentHealth = totalCurrentHealth + current
-
                     local bossHealthPercent = (current / max) * 100
                     lowestHealthPercent = math.min(lowestHealthPercent, bossHealthPercent)
                 end
@@ -158,7 +154,6 @@ function CritTracker:UpdateExecutePhaseStatus()
         return
     end
 
-    -- Only check boss health if we're not already in execute phase
     if not self.inExecutePhase then
         local bossHealth = self:GetBossHealthPercentage()
         self.currentBossHealth = bossHealth
@@ -210,27 +205,15 @@ end
 function CritTracker:OnActiveWeaponPairChanged(eventCode, activeWeaponPair, locked)
     -- Don't update if the weapon pair is locked (during switching animation)
     if locked then
-        self:DebugPrint("Weapon pair locked, skipping update")
         return
     end
 
-    -- Log the bar change attempt
-    self:DebugPrint(string.format("Bar swap detected: %d -> %d", self.currentActiveBar, activeWeaponPair))
-
-    -- Use a delayed approach to ensure the bar swap is complete
-    -- This mimics the successful manual capture timing
     EVENT_MANAGER:RegisterForUpdate("CritTracker_AutoBarCapture", 250, function()
         EVENT_MANAGER:UnregisterForUpdate("CritTracker_AutoBarCapture")
 
-        -- Verify the bar swap actually occurred
         local currentBar = GetActiveWeaponPairInfo()
         if currentBar == activeWeaponPair then
-            -- Call the working ForceBarCapture function
             local capturedCrit = self:ForceBarCapture()
-            self:DebugPrint(string.format("Auto-captured bar %d: %.1f%%", currentBar, capturedCrit))
-        else
-            self:DebugPrint(string.format("Bar swap verification failed: expected %d, got %d",
-                activeWeaponPair, currentBar))
         end
     end)
 end
@@ -238,8 +221,6 @@ end
 function CritTracker:ForceBarCapture()
     local currentBar = GetActiveWeaponPairInfo()
     local currentCritChance = self:GetCharSheetCritChance()
-
-
 
     if currentBar == 1 then
         self.frontBarCritChance = currentCritChance
@@ -278,17 +259,13 @@ function CritTracker:ManualBarCapture()
     local currentBar = GetActiveWeaponPairInfo()
     local currentCritChance = self:GetCharSheetCritChance()
 
-    self:DebugPrint(string.format("Manually capturing bar %d with %.1f%% crit", currentBar, currentCritChance))
-
     if currentBar == 1 then
         self.frontBarCritChance = currentCritChance
-        self:DebugPrint(string.format("Manually captured front bar: %.1f%%", currentCritChance))
     elseif currentBar == 2 then
         self.backBarCritChance = currentCritChance
-        self:DebugPrint(string.format("Manually captured back bar: %.1f%%", currentCritChance))
     end
 
-    self.currentActiveBar = currentBar -- ADD THIS CRITICAL LINE
+    self.currentActiveBar = currentBar
     self:UpdateDisplay()
 end
 
@@ -362,12 +339,22 @@ function CritTracker:OnCombatStateChanged(inCombat)
 
         -- Reset boss discovery
         self.discoveredBosses = {}
+
+        -- Fade in labels if showOnlyInCombat is enabled
+        if self.savedVars.showOnlyInCombat then
+            self:AnimateLabels(true)
+        end
     else
         self.inCombat = false
 
         -- Show summary only at end
         if self.savedVars.showNotifications then
             self:PrintCombatSummary()
+        end
+
+        -- Fade out labels if showOnlyInCombat is enabled
+        if self.savedVars.showOnlyInCombat then
+            self:AnimateLabels(false)
         end
 
         -- Delay to let buffs expire before reading character sheet
@@ -449,16 +436,16 @@ function CritTracker:UpdateDisplay()
 
     -- Check if we should only show during execute phase
     if self.savedVars.showExecutePhaseOnly and not self.inExecutePhase then
-        ct2_line1CritInfo:SetText("")
-        ct2_line2_CritDamage:SetText("")
-        ct2_line3_ExecutePhase:SetText("")
+        line1_CritInfo:SetText("")
+        line2_CritDamage:SetText("")
+        line3_ExecutePhase:SetText("")
         return
     end
 
     -- Check if we should hide main lines during execute phase
     if self.savedVars.hideMainLinesInExecute and self.inExecutePhase then
-        ct2_line1CritInfo:SetText("")
-        ct2_line2_CritDamage:SetText("")
+        line1_CritInfo:SetText("")
+        line2_CritDamage:SetText("")
         -- Only show execute phase line
         if self.savedVars.enableExecuteTracking then
             local executeHits = self.executePhaseCritCount + self.executePhaseNormalCount
@@ -470,17 +457,17 @@ function CritTracker:UpdateDisplay()
                 if self.savedVars.showCritDmg then
                     executeText = string.format("Execute: %.1f%% • Dmg: %.0f%%", executeCritRate, executeCritDamage)
                 end
-                ct2_line3_ExecutePhase:SetText(executeText)
+                line3_ExecutePhase:SetText(executeText)
             else
-                ct2_line3_ExecutePhase:SetText("")
+                line3_ExecutePhase:SetText("")
             end
         else
-            ct2_line3_ExecutePhase:SetText("")
+            line3_ExecutePhase:SetText("")
         end
 
         -- Apply execute color to the execute line
         local executeColor = self.savedVars.executePhaseColor
-        ct2_line3_ExecutePhase:SetColor(executeColor[1], executeColor[2], executeColor[3], executeColor[4])
+        line3_ExecutePhase:SetColor(executeColor[1], executeColor[2], executeColor[3], executeColor[4])
         return
     end
 
@@ -488,16 +475,15 @@ function CritTracker:UpdateDisplay()
         -- Show stat sheet info when no combat data
         if self.savedVars.simpleMode then
             local line1Text = string.format("%.1f%%", charSheet)
-            ct2_line1CritInfo:SetText(line1Text)
-            ct2_line2_CritDamage:SetText("")
-            ct2_line3_ExecutePhase:SetText("")
+            line1_CritInfo:SetText(line1Text)
+            line2_CritDamage:SetText("")
+            line3_ExecutePhase:SetText("")
         else
-            -- MODIFIED: Show dual bar format in verbose mode
             local barCritText = self:GetFormattedBarCritChances()
             local line1Text = string.format("Effective: %.1f%% • Base: %s", charSheet, barCritText)
-            ct2_line1CritInfo:SetText(line1Text)
-            ct2_line2_CritDamage:SetText("")
-            ct2_line3_ExecutePhase:SetText("")
+            line1_CritInfo:SetText(line1Text)
+            line2_CritDamage:SetText("")
+            line3_ExecutePhase:SetText("")
         end
         return
     end
@@ -533,10 +519,10 @@ function CritTracker:UpdateDisplay()
                 critRate, critDamageHex, self.critDamagePercent)
         end
         line1Text = line1Text .. executePhaseText
-        ct2_line1CritInfo:SetText(line1Text)
-        ct2_line2_CritDamage:SetText("")
+        line1_CritInfo:SetText(line1Text)
+        line2_CritDamage:SetText("")
 
-        -- Execute phase line (simple mode)
+        -- Execute phase line
         if self.savedVars.enableExecuteTracking and self.inExecutePhase then
             local executeHits = self.executePhaseCritCount + self.executePhaseNormalCount
             if executeHits > 0 then
@@ -548,21 +534,20 @@ function CritTracker:UpdateDisplay()
                     executeText = string.format("Exe: |c%s%.1f%%|r • Dmg: %.0f%%|r",
                         executeHex, executeCritRate, executeCritDamage)
                 end
-                ct2_line3_ExecutePhase:SetText(executeText)
+                line3_ExecutePhase:SetText(executeText)
             end
         else
-            ct2_line3_ExecutePhase:SetText("")
+            line3_ExecutePhase:SetText("")
         end
     else
-        -- FIXED: Detailed mode with dual bar display (NOW INCLUDES COMBAT DATA)
         local barCritText = self:GetFormattedBarCritChances()
         local line1Text = string.format("Effective: %.1f%% • Base: %s", critRate, barCritText)
         local line2Text = ""
         if self.savedVars.showCritDmg then
             line2Text = string.format("Average Crit Damage: %.0f%%", self.critDamagePercent)
         end
-        ct2_line1CritInfo:SetText(line1Text)
-        ct2_line2_CritDamage:SetText(line2Text)
+        line1_CritInfo:SetText(line1Text)
+        line2_CritDamage:SetText(line2Text)
 
         -- Verbose execute phase
         if self.savedVars.enableExecuteTracking then
@@ -573,15 +558,15 @@ function CritTracker:UpdateDisplay()
                     if self.savedVars.showCritDmg and executeCritDamage > 0 then
                         executeText = executeText .. string.format(" • %.0f%% dmg", executeCritDamage)
                     end
-                    ct2_line3_ExecutePhase:SetText(executeText)
+                    line3_ExecutePhase:SetText(executeText)
                 else
-                    ct2_line3_ExecutePhase:SetText("")
+                    line3_ExecutePhase:SetText("")
                 end
             else
-                ct2_line3_ExecutePhase:SetText("")
+                line3_ExecutePhase:SetText("")
             end
         else
-            ct2_line3_ExecutePhase:SetText("")
+            line3_ExecutePhase:SetText("")
         end
     end
 
@@ -591,11 +576,11 @@ function CritTracker:UpdateDisplay()
     -- Apply execute color only to the execute line (line3) when in execute phase
     if self.inExecutePhase and self.savedVars.enableExecuteTracking then
         local executeColor = self.savedVars.executePhaseColor
-        ct2_line3_ExecutePhase:SetColor(executeColor[1], executeColor[2], executeColor[3], executeColor[4])
+        line3_ExecutePhase:SetColor(executeColor[1], executeColor[2], executeColor[3], executeColor[4])
     else
         -- Reset execute line color when not in execute phase
         local defaultColor = self.savedVars.critRateColor
-        ct2_line3_ExecutePhase:SetColor(defaultColor[1], defaultColor[2], defaultColor[3], defaultColor[4])
+        line3_ExecutePhase:SetColor(defaultColor[1], defaultColor[2], defaultColor[3], defaultColor[4])
     end
 end
 
@@ -604,12 +589,12 @@ end
 --=============================================================================
 local fontBook = {
     ["ESO_Standard"] = {
-        name = "ESO Standard",
+        name = "Standard",
         path = nil,
         description = "Default ESO font"
     },
     ["ESO_Bold"] = {
-        name = "ESO Bold",
+        name = "Bold",
         path = "$(BOLD_FONT)|%d|soft-shadow-thick",
         description = "Bold ESO font"
     },
@@ -619,12 +604,12 @@ local fontBook = {
         description = "Handwritten-style font"
     },
     ["Futura"] = {
-        name = "Futura Condensed",
+        name = "Condensed",
         path = "EsoUI/Common/Fonts/FuturaStd-CondensedLight.slug|%d|soft-shadow-thin",
         description = "Clean, modern font"
     },
     ["Trajan"] = {
-        name = "Trajan Pro",
+        name = "Tablet",
         path = "EsoUI/Common/Fonts/TrajanPro-Regular.slug|%d|soft-shadow-thick",
         description = "Classical, carved stone appearance"
     }
@@ -651,9 +636,14 @@ function CritTracker:GetCurrentFont()
 end
 
 function CritTracker:BuildFontString()
-    local selectedFont = self.savedVars.selectedFont
-    local fontSize = self.savedVars.fontSize
-    local fontScale = self.savedVars.fontScale
+    local selectedFont = self.savedVars and self.savedVars.selectedFont or "ESO_Standard"
+    local fontSize = self.savedVars and self.savedVars.fontSize or 28
+    local fontScale = self.savedVars and self.savedVars.fontScale or 1.0
+
+    -- Ensure all values are numbers with fallbacks
+    fontSize = tonumber(fontSize) or 28
+    fontScale = tonumber(fontScale) or 1.0
+
     local finalSize = math.floor(fontSize * fontScale)
 
     if selectedFont == "ESO_Standard" then
@@ -693,13 +683,27 @@ function CritTracker:ApplyColorsToLabels()
     local labels = self:GetLabels()
 
     if labels[1] then -- crit rate label
-        local color = self.savedVars.critRateColor
-        labels[1]:SetColor(color[1], color[2], color[3], color[4])
+        -- Add safety checks for color array
+        local color = (self.savedVars and self.savedVars.critRateColor) or { 1.0, 1.0, 1.0, 1.0 }
+        -- Ensure color is a valid array with 4 elements
+        if type(color) == "table" and #color >= 4 then
+            labels[1]:SetColor(color[1] or 1.0, color[2] or 1.0, color[3] or 1.0, color[4] or 1.0)
+        else
+            -- Fallback to white if color is invalid
+            labels[1]:SetColor(1.0, 1.0, 1.0, 1.0)
+        end
     end
 
     if labels[2] then -- crit damage label
-        local color = self.savedVars.critDamageColor
-        labels[2]:SetColor(color[1], color[2], color[3], color[4])
+        -- Add safety checks for color array
+        local color = (self.savedVars and self.savedVars.critDamageColor) or { 1.0, 0.8, 0.4, 1.0 }
+        -- Ensure color is a valid array with 4 elements
+        if type(color) == "table" and #color >= 4 then
+            labels[2]:SetColor(color[1] or 1.0, color[2] or 0.8, color[3] or 0.4, color[4] or 1.0)
+        else
+            -- Fallback to orange if color is invalid
+            labels[2]:SetColor(1.0, 0.8, 0.4, 1.0)
+        end
     end
 end
 
@@ -708,19 +712,19 @@ end
 --=============================================================================
 function CritTracker:GetLabels()
     return {
-        _G["ct2_line1CritInfo"],
-        _G["ct2_line2_CritDamage"],
-        _G["ct2_line3_ExecutePhase"]
+        _G["line1_CritInfo"],
+        _G["line2_CritDamage"],
+        _G["line3_ExecutePhase"]
     }
 end
 
 function CritTracker:UpdateLabelSettings()
-    local fontSize = self.savedVars.fontSize or 24
-    local fontScale = self.savedVars.fontScale or 1.0
-    local posX = self.savedVars.labelPosX or 560
-    local posY = self.savedVars.labelPosY or 60
+    -- Add safety checks for nil values
+    local fontSize = (self.savedVars and tonumber(self.savedVars.fontSize)) or 24
+    local fontScale = (self.savedVars and tonumber(self.savedVars.fontScale)) or 1.0
+    local posX = (self.savedVars and tonumber(self.savedVars.labelPosX)) or 560
+    local posY = (self.savedVars and tonumber(self.savedVars.labelPosY)) or 60
     local labels = self:GetLabels()
-
 
     local finalFontSize = math.floor(fontSize * fontScale)
     local proportionalSpacing = math.max(finalFontSize * 0.8, 5)
@@ -748,6 +752,55 @@ function CritTracker:ClearLabels()
 end
 
 --=============================================================================
+-- FADE ANIMATION
+--=============================================================================
+function CritTracker:ShouldShowTracker()
+    local setting = self.savedVars.showOnlyInCombat
+
+    if setting == "always" then
+        return true
+    elseif setting == "combat" then
+        return self.inCombat
+    elseif setting == "dungeon" then
+        return IsUnitInDungeon("player")
+    end
+
+    return true -- Default to visible
+end
+
+function CritTracker:AnimateLabels(fadeIn)
+    local labels = self:GetLabels()
+
+    -- Cancel any existing timeline
+    if self.fadeTimeline then
+        self.fadeTimeline:Stop()
+        self.fadeTimeline = nil
+    end
+
+    -- Create new timeline
+    self.fadeTimeline = ANIMATION_MANAGER:CreateTimeline()
+
+    for i, label in ipairs(labels) do
+        if label and not label:IsHidden() then
+            local animation = self.fadeTimeline:InsertAnimation(ANIMATION_ALPHA, label)
+
+            if fadeIn then
+                animation:SetAlphaValues(0, 1)
+                label:SetAlpha(0)
+            else
+                animation:SetAlphaValues(label:GetAlpha(), 0)
+            end
+
+            animation:SetDuration(300)
+            animation:SetEasingFunction(ZO_EaseOutQuadratic)
+        end
+    end
+
+    self.fadeTimeline:SetPlaybackType(ANIMATION_PLAYBACK_ONE_SHOT)
+    self.fadeTimeline:PlayFromStart()
+end
+
+--=============================================================================
 -- Settings Menu
 --=============================================================================
 function CritTracker:CreateSettingsMenu()
@@ -756,7 +809,7 @@ function CritTracker:CreateSettingsMenu()
 
     local panelData = {
         type = "panel",
-        name = "Crit Tracker v2",
+        name = "Crit Tracker",
         author = "YFNatey",
         version = "1.1",
         registerForRefresh = true,
@@ -766,30 +819,24 @@ function CritTracker:CreateSettingsMenu()
     local fontChoices, fontChoicesValues = self:GetFontChoices()
     local optionsTable = {
         {
-            type = "button",
-            name = "Toggle UI",
-            func = function()
+            type = "checkbox",
+            name = "Show Tracker",
+            getFunc = function() return self.savedVars.uiVisible end,
+            setFunc = function(value)
+                self.savedVars.uiVisible = value
                 local labels = self:GetLabels()
-                local isCurrentlyHidden = labels[1] and labels[1]:IsHidden()
-
-                if isCurrentlyHidden then
-                    -- Show labels
-                    for i, label in ipairs(labels) do
-                        if label then
-                            label:SetHidden(false)
-                        end
-                    end
-                    self:UpdateDisplay()
-                else
-                    -- Hide labels
-                    for i, label in ipairs(labels) do
-                        if label then
-                            label:SetHidden(true)
-                        end
+                for i, label in ipairs(labels) do
+                    if label then
+                        label:SetHidden(not value)
                     end
                 end
-            end
+                if value then
+                    self:UpdateDisplay()
+                end
+            end,
+            default = true,
         },
+
         {
             type = "button",
             name = "Reset Stats",
@@ -949,10 +996,10 @@ Execute Crit DMG: 9156 crit, 4102 normal (+123% / 2.23x)]],
         },
         {
             type = "slider",
-            name = "X Position",
+            name = "Horizontal",
             min = 0,
-            max = 5000,
-            step = 10,
+            max = GuiRoot:GetWidth(),
+            step = 20,
             getFunc = function() return self.savedVars.labelPosX end,
             setFunc = function(value)
                 self.savedVars.labelPosX = value
@@ -962,10 +1009,10 @@ Execute Crit DMG: 9156 crit, 4102 normal (+123% / 2.23x)]],
         },
         {
             type = "slider",
-            name = "Y Position",
+            name = "Vertical",
             min = 0,
-            max = 7000,
-            step = 10,
+            max = GuiRoot:GetHeight(),
+            step = 20,
             getFunc = function() return self.savedVars.labelPosY end,
             setFunc = function(value)
                 self.savedVars.labelPosY = value
@@ -997,7 +1044,7 @@ Execute Crit DMG: 9156 crit, 4102 normal (+123% / 2.23x)]],
                 self.savedVars.critDamageColor = { r, g, b, a }
                 self:ApplyColorsToLabels()
             end,
-            default = { 1.0, 0.8, 0.4, 1.0 },
+            default = { 1.0, 1.0, 1.0, 1.0 },
         },
         {
             type = "header",
@@ -1020,14 +1067,6 @@ Execute Crit DMG: 9156 crit, 4102 normal (+123% / 2.23x)]],
             func = function() RequestOpenUnsafeURL("https://paypal.me/yfnatey") end,
             width = "half"
         },
-        {
-            type = "button",
-            name = "Ko-fi",
-            tooltip = "Ko-fi.me/yfnatey",
-            func = function() RequestOpenUnsafeURL("https://Ko-fi.com/yfnatey") end,
-            width = "half"
-        },
-
     }
     LAM:RegisterAddonPanel(panelName, panelData)
     LAM:RegisterOptionControls(panelName, optionsTable)
@@ -1046,27 +1085,36 @@ end
 -- INITIALIZE
 --=============================================================================
 function CritTracker:RegisterAdditionalBarEvents()
-    -- Trigger bar capture when combat ends (to refresh display)
     EVENT_MANAGER:RegisterForEvent(ADDON_NAME .. "_CombatEnd", EVENT_PLAYER_COMBAT_STATE,
         function(_, inCombat)
             if not inCombat then
-                -- Wait for the delay period to end, then capture current bar
                 EVENT_MANAGER:RegisterForUpdate("CritTracker_PostCombat", 7500, function()
                     EVENT_MANAGER:UnregisterForUpdate("CritTracker_PostCombat")
                     local capturedCrit = self:ForceBarCapture()
-                    self:DebugPrint(string.format("Post-combat bar capture: %.1f%%", capturedCrit))
                 end)
             end
         end)
+
+    EVENT_MANAGER:RegisterForEvent(ADDON_NAME .. "_ZoneChange", EVENT_ZONE_CHANGED,
+        function(eventCode, zoneName, subZoneName, newSubzone, zoneId, subZoneId)
+            self:OnZoneChanged()
+        end)
+end
+
+function CritTracker:OnZoneChanged()
+    if self.savedVars.showOnlyInCombat == "dungeon" then
+        local inDungeon = IsUnitInDungeon("player")
+        if inDungeon then
+            self:AnimateLabels(true)
+        else
+            self:AnimateLabels(false)
+        end
+    end
 end
 
 local function InitializeBarTracking()
     local currentBar = GetActiveWeaponPairInfo()
     CritTracker.currentActiveBar = currentBar
-
-    CritTracker:DebugPrint(string.format("Initialization: Starting on bar %d", currentBar))
-
-    -- Multiple initialization attempts using the proven ForceBarCapture method
     local initAttempts = 0
     local maxInitAttempts = 3
 
@@ -1078,14 +1126,12 @@ local function InitializeBarTracking()
             EVENT_MANAGER:RegisterForUpdate("CritTracker_InitRetry", 1000, performInitCapture)
         end
     end
-
-    -- Start the initialization sequence
     EVENT_MANAGER:RegisterForUpdate("CritTracker_InitialCapture", 500, performInitCapture)
 end
 
 local function Initialize()
     CritTracker.savedVars = ZO_SavedVars:NewCharacterIdSettings(
-        "CritTracker2_SavedVars",
+        "CritTracker_SavedVars",
         1,
         nil,
         defaults
@@ -1094,7 +1140,7 @@ local function Initialize()
     local labels = CritTracker:GetLabels()
     for i, label in ipairs(labels) do
         if label then
-            label:SetHidden(false)
+            label:SetHidden(not CritTracker.savedVars.uiVisible)
         end
     end
 
@@ -1122,40 +1168,10 @@ local function Initialize()
     CritTracker:UpdateDisplay()
 end
 
-
--- Optional: Add a slash command for manual bar capture (for testing)
 SLASH_COMMANDS["/critbar"] = function()
     CritTracker:ManualBarCapture()
-    d("Manual bar capture executed")
 end
 
--- Optional: Add a slash command to show current bar status
-SLASH_COMMANDS["/critstatus"] = function()
-    local currentBar = GetActiveWeaponPairInfo()
-    d(string.format("Current bar: %d", currentBar))
-    d(string.format("Front bar crit: %.1f%%", CritTracker.frontBarCritChance))
-    d(string.format("Back bar crit: %.1f%%", CritTracker.backBarCritChance))
-    d(string.format("Current crit: %.1f%%", CritTracker:GetCharSheetCritChance()))
-end
-
-SLASH_COMMANDS["/critbar"] = function()
-    local capturedCrit = CritTracker:ForceBarCapture() -- Use ForceBarCapture instead
-    d(string.format("Manual bar capture executed: %.1f%%", capturedCrit))
-end
-
-SLASH_COMMANDS["/critstatus"] = function()
-    local currentBar = GetActiveWeaponPairInfo()
-    local currentCrit = CritTracker:GetCharSheetCritChance()
-
-    d("=== Crit Tracker Bar Status ===")
-    d(string.format("Current active bar: %d", currentBar))
-    d(string.format("Tracked active bar: %d", CritTracker.currentActiveBar))
-    d(string.format("Current crit chance: %.1f%%", currentCrit))
-    d(string.format("Front bar stored: %.1f%%", CritTracker.frontBarCritChance))
-    d(string.format("Back bar stored: %.1f%%", CritTracker.backBarCritChance))
-    d(string.format("In combat: %s", tostring(CritTracker.inCombat)))
-    d(string.format("In delay: %s", tostring(CritTracker.delay)))
-end
 --=============================================================================
 -- EVENT MANAGERS
 --=============================================================================

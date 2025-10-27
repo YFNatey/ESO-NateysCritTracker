@@ -2,12 +2,12 @@
 ## The Elder Scrolls® and related logos are registered trademarks or trademarks of ZeniMax Media Inc.
 ## in the United States and/or other countries. All rights reserved.
 
-## Title: Crit Tracker v2
+## Title: Crit Tracker
 ## Author: YFNatey
 ## Version: 1.0
-## APIVersion: 101046
-## SavedVariables: CritTracker2_SavedVars
+## APIVersion: 101047
+## SavedVariables: CritTracker_SavedVars
 ## ConsoleDependsOn: LibAddonMenu-2.0
 
-CritTracker2.xml
-CritTracker2.lua
+CritTracker.xml
+CritTracker.lua
