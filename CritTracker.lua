@@ -1076,7 +1076,7 @@ end
 --=============================================================================
 -- INITIALIZE
 --=============================================================================
-function CritTracker:RegisterAdditionalBarEvents()
+function CritTracker:RegisterCombatEvents()
     EVENT_MANAGER:RegisterForEvent(ADDON_NAME .. "_CombatEnd", EVENT_PLAYER_COMBAT_STATE,
         function(_, inCombat)
             if not inCombat then
@@ -1087,18 +1087,21 @@ function CritTracker:RegisterAdditionalBarEvents()
             end
         end)
 
+    --[[
     EVENT_MANAGER:RegisterForEvent(ADDON_NAME .. "_ZoneChange", EVENT_ZONE_CHANGED,
         function(eventCode, zoneName, subZoneName, newSubzone, zoneId, subZoneId)
             self:OnZoneChanged()
         end)
+        ]]
 end
 
+--[[
 function CritTracker:OnZoneChanged()
     if self.savedVars.showOnlyInCombat == "dungeon" then
         local inDungeon = IsUnitInDungeon("player")
     end
 end
-
+--]]
 local function InitializeBarTracking()
     local currentBar = GetActiveWeaponPairInfo()
     CritTracker.currentActiveBar = currentBar
@@ -1146,9 +1149,9 @@ local function Initialize()
         end)
 
     -- Register additional bar tracking events
-    CritTracker:RegisterAdditionalBarEvents()
+    CritTracker:RegisterCombatEvents()
 
-    -- Initialize bar tracking with multiple attempts
+    -- Initialize bar
     InitializeBarTracking()
 
     CritTracker:CreateSettingsMenu()
