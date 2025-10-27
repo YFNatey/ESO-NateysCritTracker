@@ -339,11 +339,6 @@ function CritTracker:OnCombatStateChanged(inCombat)
 
         -- Reset boss discovery
         self.discoveredBosses = {}
-
-        -- Fade in labels if showOnlyInCombat is enabled
-        if self.savedVars.showOnlyInCombat then
-            self:AnimateLabels(true)
-        end
     else
         self.inCombat = false
 
@@ -352,10 +347,7 @@ function CritTracker:OnCombatStateChanged(inCombat)
             self:PrintCombatSummary()
         end
 
-        -- Fade out labels if showOnlyInCombat is enabled
-        if self.savedVars.showOnlyInCombat then
-            self:AnimateLabels(false)
-        end
+
 
         -- Delay to let buffs expire before reading character sheet
         self.delay = true
@@ -1104,11 +1096,6 @@ end
 function CritTracker:OnZoneChanged()
     if self.savedVars.showOnlyInCombat == "dungeon" then
         local inDungeon = IsUnitInDungeon("player")
-        if inDungeon then
-            self:AnimateLabels(true)
-        else
-            self:AnimateLabels(false)
-        end
     end
 end
 
