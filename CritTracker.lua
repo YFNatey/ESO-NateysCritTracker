@@ -83,6 +83,9 @@ local defaults = {
     hideMainLinesInExecute = false,
 
     -- custom font string
+    useCustomFormat = false,
+    customFormatString = "<c>% • Dmg: <d>%",
+
 }
 
 
@@ -538,6 +541,24 @@ end
 --=============================================================================
 -- UPDATE DISPLAY
 --=============================================================================
+
+function CritTracker:ParseCustomFormat(formatString, critRate, critDamage)
+    if not formatString then
+        return ""
+    end
+
+    local critRateHex = self:ColorToHex(self.savedVars.critRateColor)
+    local critDamageHex = self:ColorToHex(self.savedVars.critDamageColor)
+
+    -- Replace <c> with colored crit rate
+    local result = string.gsub(formatString, "<c>", string.format("|c%s%.1f|r", critRateHex, critRate))
+
+    -- Replace <d> with colored crit damage
+    result = string.gsub(result, "<d>", string.format("|c%s%.0f|r", critDamageHex, critDamage))
+
+    return result
+end
+
 function CritTracker:UpdateDisplay()
     local totalHits = self.critCount + self.normalCount
     local charSheet = self:GetCharSheetCritChance()
@@ -618,14 +639,23 @@ function CritTracker:UpdateDisplay()
 
     -- Simple Mode
     if self.savedVars.simpleMode then
-        local line1Text = string.format("%.1f%%", critRate)
-        if self.savedVars.showCritDmg then
-            local critRateHex = self:ColorToHex(self.savedVars.critRateColor)
-            local critDamageHex = self:ColorToHex(self.savedVars.critDamageColor)
+        local line1Text = ""
 
-            line1Text = string.format("%.1f%% • |c%sDmg: %.0f%%|r",
-                critRate, critDamageHex, self.critDamagePercent)
+        if self.savedVars.useCustomFormat then
+            -- Use custom format
+            line1Text = self:ParseCustomFormat(self.savedVars.customFormatString, critRate, self.critDamagePercent)
+        else
+            -- Use default format
+            line1Text = string.format("%.1f%%", critRate)
+            if self.savedVars.showCritDmg then
+                local critRateHex = self:ColorToHex(self.savedVars.critRateColor)
+                local critDamageHex = self:ColorToHex(self.savedVars.critDamageColor)
+
+                line1Text = string.format("%.1f%% • |c%sDmg: %.0f%%|r",
+                    critRate, critDamageHex, self.critDamagePercent)
+            end
         end
+
         line1Text = line1Text .. executePhaseText
         line1_CritInfo:SetText(line1Text)
         line2_CritDamage:SetText("")
@@ -963,6 +993,7 @@ function CritTracker:CreateSettingsMenu()
             type = "header",
             name = "Display Options"
         },
+
         {
             type = "checkbox",
             name = "Simple Display Mode",
@@ -978,7 +1009,7 @@ function CritTracker:CreateSettingsMenu()
             type = "checkbox",
             name = "Show Average Crit Damage",
             tooltip =
-            "Early readings may exceed the 125% cap or seem inaccurate due to small sample sizes - accuracy improves with more combat data.",
+            "Shows your crit damage percentage based on your damage in combat, not set bonuses or buffs/debuffs to bosses. Averages the total crit damage done vs normal damage.",
             getFunc = function() return self.savedVars.showCritDmg end,
             setFunc = function(value)
                 self.savedVars.showCritDmg = value
@@ -988,9 +1019,38 @@ function CritTracker:CreateSettingsMenu()
         },
         {
             type = "checkbox",
+            name = "Use Custom Format",
+            tooltip =
+            "Create your own tracker by editing the text fields below.\nUse <c> for crit rate\nUse <d> for crit damage",
+            getFunc = function() return self.savedVars.useCustomFormat end,
+            setFunc = function(value)
+                self.savedVars.useCustomFormat = value
+                if value then
+                    self.savedVars.simpleMode = true
+                end
+                self:UpdateDisplay()
+            end,
+            default = false,
+        },
+        {
+            type = "editbox",
+            name = "In-Combat Text",
+            tooltip =
+            "\nUse <c> for crit rate\nUse <d> for crit damage",
+            getFunc = function() return self.savedVars.customFormatString end,
+            setFunc = function(value)
+                self.savedVars.customFormatString = value
+                self:UpdateDisplay()
+            end,
+            default = "<c>% • Dmg: <d>%",
+            disabled = function() return not self.savedVars.useCustomFormat end,
+            width = "full",
+        },
+
+        {
+            type = "checkbox",
             name = "Show Combat Stats",
             tooltip = [[Display fight summary in chat after each combat encounter
-Example output:
 ==Combat Summary==
 Total Hits: 156 (89 crits, 67 normal)
 Crit Rate: 57.1% (Max: 63.2%)
@@ -1001,81 +1061,10 @@ Execute Crit DMG: 9156 crit, 4102 normal (+123% / 2.23x)]],
             setFunc = function(value) self.savedVars.showNotifications = value end,
             default = false
         },
-        {
-
-            type = "header",
-            name = "Execute Phase Tracking"
-        },
-
-        {
-            type = "checkbox",
-            name = "Enable",
-            tooltip = "Track lucky crits when boss health drops below the threshold",
-            getFunc = function() return self.savedVars.enableExecuteTracking end,
-            setFunc = function(value)
-                self.savedVars.enableExecuteTracking = value
-                self:UpdateDisplay()
-            end,
-            default = false,
-        },
-        {
-            type = "checkbox",
-            name = "Execute Focus",
-            tooltip = "Hide the main crit rate and damage lines when in execute phase, showing only execute stats",
-            getFunc = function() return self.savedVars.hideMainLinesInExecute end,
-            setFunc = function(value)
-                self.savedVars.hideMainLinesInExecute = value
-                self:UpdateDisplay()
-            end,
-            default = false,
-            disabled = function() return not self.savedVars.enableExecuteTracking end,
-        },
-        {
-            type = "checkbox",
-            name = "hide until threshold",
-            tooltip = "Hide tracker until execute phase",
-            getFunc = function() return self.savedVars.showExecutePhaseOnly end,
-            setFunc = function(value)
-                self.savedVars.showExecutePhaseOnly = value
-                self:UpdateDisplay()
-            end,
-            default = false,
-            disabled = function() return not self.savedVars.enableExecuteTracking end,
-        },
-        {
-            type = "slider",
-            name = "Threshold (%)",
-            tooltip = "Boss health percentage threshold for execute phase tracking",
-            min = 10,
-            max = 50,
-            step = 1,
-            getFunc = function() return self.savedVars.executeThreshold end,
-            setFunc = function(value)
-                self.savedVars.executeThreshold = value
-                self:UpdateDisplay()
-            end,
-            default = 30,
-            disabled = function() return not self.savedVars.enableExecuteTracking end,
-        },
-        {
-            type = "colorpicker",
-            name = "Color",
-            tooltip = "Color used when displaying execute phase statistics",
-            getFunc = function()
-                local color = self.savedVars.executePhaseColor
-                return color[1], color[2], color[3], color[4]
-            end,
-            setFunc = function(r, g, b, a)
-                self.savedVars.executePhaseColor = { r, g, b, a }
-                self:UpdateDisplay()
-            end,
-            default = { 1.0, 0.2, 0.2, 1.0 },
-            disabled = function() return not self.savedVars.enableExecuteTracking end,
-        },
 
         {
             type = "header",
-            name = "Visual Customization"
+            name = "Appearance"
         },
         {
             type = "dropdown",
@@ -1154,6 +1143,78 @@ Execute Crit DMG: 9156 crit, 4102 normal (+123% / 2.23x)]],
             end,
             default = { 1.0, 1.0, 1.0, 1.0 },
         },
+        {
+
+            type = "header",
+            name = "Execute Phase Tracking"
+        },
+
+        {
+            type = "checkbox",
+            name = "Enable",
+            tooltip = "Track lucky crits when boss health drops below the threshold",
+            getFunc = function() return self.savedVars.enableExecuteTracking end,
+            setFunc = function(value)
+                self.savedVars.enableExecuteTracking = value
+                self:UpdateDisplay()
+            end,
+            default = false,
+        },
+        {
+            type = "checkbox",
+            name = "Execute Focus",
+            tooltip = "Hide the main crit rate and damage lines when in execute phase, showing only execute stats",
+            getFunc = function() return self.savedVars.hideMainLinesInExecute end,
+            setFunc = function(value)
+                self.savedVars.hideMainLinesInExecute = value
+                self:UpdateDisplay()
+            end,
+            default = false,
+            disabled = function() return not self.savedVars.enableExecuteTracking end,
+        },
+        {
+            type = "checkbox",
+            name = "hide until threshold",
+            tooltip = "Hide tracker until execute phase",
+            getFunc = function() return self.savedVars.showExecutePhaseOnly end,
+            setFunc = function(value)
+                self.savedVars.showExecutePhaseOnly = value
+                self:UpdateDisplay()
+            end,
+            default = false,
+            disabled = function() return not self.savedVars.enableExecuteTracking end,
+        },
+        {
+            type = "slider",
+            name = "Threshold (%)",
+            tooltip = "Boss health percentage threshold for execute phase tracking",
+            min = 10,
+            max = 50,
+            step = 1,
+            getFunc = function() return self.savedVars.executeThreshold end,
+            setFunc = function(value)
+                self.savedVars.executeThreshold = value
+                self:UpdateDisplay()
+            end,
+            default = 30,
+            disabled = function() return not self.savedVars.enableExecuteTracking end,
+        },
+        {
+            type = "colorpicker",
+            name = "Color",
+            tooltip = "Color used when displaying execute phase statistics",
+            getFunc = function()
+                local color = self.savedVars.executePhaseColor
+                return color[1], color[2], color[3], color[4]
+            end,
+            setFunc = function(r, g, b, a)
+                self.savedVars.executePhaseColor = { r, g, b, a }
+                self:UpdateDisplay()
+            end,
+            default = { 1.0, 0.2, 0.2, 1.0 },
+            disabled = function() return not self.savedVars.enableExecuteTracking end,
+        },
+
         {
             type = "header",
             name = "Support"
