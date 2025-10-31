@@ -16,6 +16,7 @@ CritTracker.fightNormalCount = 0
 CritTracker.fightTotalCritDamage = 0
 CritTracker.fightTotalNormalDamage = 0
 CritTracker.fightMaxCrit = nil
+CritTracker.lastDisplayUpdate = 0
 
 -- Execute phase tracking
 CritTracker.currentBossHealth = 100
@@ -33,6 +34,29 @@ CritTracker.backBarCritChance = 0
 CritTracker.currentActiveBar = 1
 CritTracker.lastBarUpdate = 0
 CritTracker.barUpdateInterval = 1000
+
+
+CritTracker.lightAttackCritCount = 0
+CritTracker.lightAttackNormalCount = 0
+CritTracker.lightAttackTotalCritDamage = 0
+CritTracker.lightAttackTotalNormalDamage = 0
+
+CritTracker.abilityAndHeavyCritCount = 0
+CritTracker.abilityAndHeavyNormalCount = 0
+CritTracker.abilityAndHeavyTotalCritDamage = 0
+CritTracker.abilityAndHeavyTotalNormalDamage = 0
+
+-- Per-fight tracking for light attacks
+CritTracker.fightLightAttackCritCount = 0
+CritTracker.fightLightAttackNormalCount = 0
+CritTracker.fightLightAttackTotalCritDamage = 0
+CritTracker.fightLightAttackTotalNormalDamage = 0
+
+-- Per-fight tracking for abilities and heavies
+CritTracker.fightAbilityAndHeavyCritCount = 0
+CritTracker.fightAbilityAndHeavyNormalCount = 0
+CritTracker.fightAbilityAndHeavyTotalCritDamage = 0
+CritTracker.fightAbilityAndHeavyTotalNormalDamage = 0
 
 local defaults = {
     fontSize = 28,
@@ -56,7 +80,9 @@ local defaults = {
     executeThreshold = 30.0,
     executePhaseColor = { 1.0, 0.2, 0.2, 1.0 },
     showExecutePhaseOnly = false,
-    hideMainLinesInExecute = false, --
+    hideMainLinesInExecute = false,
+
+    -- custom font string
 }
 
 
@@ -245,7 +271,7 @@ function CritTracker:GetFormattedBarCritChances()
     local frontText = self.frontBarCritChance > 0 and string.format("%.1f%%", self.frontBarCritChance) or "-.-%"
     local backText = self.backBarCritChance > 0 and string.format("%.1f%%", self.backBarCritChance) or "-.-%"
 
-    -- Add current bar indicator (optional - remove if you don't want it)
+    -- Add current bar indicator
     if self.currentActiveBar == 1 and self.frontBarCritChance > 0 then
         frontText = "[" .. frontText .. "]" -- Brackets around active bar
     elseif self.currentActiveBar == 2 and self.backBarCritChance > 0 then
@@ -276,8 +302,34 @@ function CritTracker:PrintCombatSummary()
     local totalHits = self.fightCritCount + self.fightNormalCount
     if totalHits > 0 then
         local critRate = (self.fightCritCount / totalHits) * 100
-        local avgCrit = self.fightCritCount > 0 and (self.fightTotalCritDamage / self.fightCritCount) or 0
-        local avgNormal = self.fightNormalCount > 0 and (self.fightTotalNormalDamage / self.fightNormalCount) or 0
+
+        -- Calculate weighted average crit damage
+        local lightAttackAvgCrit = self.fightLightAttackCritCount > 0 and
+            (self.fightLightAttackTotalCritDamage / self.fightLightAttackCritCount) or 0
+        local lightAttackAvgNormal = self.fightLightAttackNormalCount > 0 and
+            (self.fightLightAttackTotalNormalDamage / self.fightLightAttackNormalCount) or 0
+
+        local abilityHeavyAvgCrit = self.fightAbilityAndHeavyCritCount > 0 and
+            (self.fightAbilityAndHeavyTotalCritDamage / self.fightAbilityAndHeavyCritCount) or 0
+        local abilityHeavyAvgNormal = self.fightAbilityAndHeavyNormalCount > 0 and
+            (self.fightAbilityAndHeavyTotalNormalDamage / self.fightAbilityAndHeavyNormalCount) or 0
+
+        -- Weighted average based on hit counts
+        local totalCritHits = self.fightLightAttackCritCount + self.fightAbilityAndHeavyCritCount
+        local totalNormalHits = self.fightLightAttackNormalCount + self.fightAbilityAndHeavyNormalCount
+
+        local avgCrit = 0
+        local avgNormal = 0
+
+        if totalCritHits > 0 then
+            avgCrit = ((lightAttackAvgCrit * self.fightLightAttackCritCount) +
+                (abilityHeavyAvgCrit * self.fightAbilityAndHeavyCritCount)) / totalCritHits
+        end
+
+        if totalNormalHits > 0 then
+            avgNormal = ((lightAttackAvgNormal * self.fightLightAttackNormalCount) +
+                (abilityHeavyAvgNormal * self.fightAbilityAndHeavyNormalCount)) / totalNormalHits
+        end
 
         local currentMultiplier = avgNormal > 0 and (avgCrit / avgNormal) or 0
         local currentCritDamagePercent = currentMultiplier > 0 and ((currentMultiplier - 1) * 100) or 0
@@ -331,6 +383,18 @@ function CritTracker:OnCombatStateChanged(inCombat)
         self.fightMaxCrit = nil
         self.fightMeanCrit = nil
 
+        -- Reset light attack tracking
+        self.fightLightAttackCritCount = 0
+        self.fightLightAttackNormalCount = 0
+        self.fightLightAttackTotalCritDamage = 0
+        self.fightLightAttackTotalNormalDamage = 0
+
+        -- Reset ability/heavy tracking
+        self.fightAbilityAndHeavyCritCount = 0
+        self.fightAbilityAndHeavyNormalCount = 0
+        self.fightAbilityAndHeavyTotalCritDamage = 0
+        self.fightAbilityAndHeavyTotalNormalDamage = 0
+
         -- Reset execute phase stats
         self.executePhaseCritCount = 0
         self.executePhaseNormalCount = 0
@@ -347,8 +411,6 @@ function CritTracker:OnCombatStateChanged(inCombat)
             self:PrintCombatSummary()
         end
 
-
-
         -- Delay to let buffs expire before reading character sheet
         self.delay = true
         zo_callLater(function()
@@ -361,19 +423,23 @@ end
 --=============================================================================
 -- TRACK PLAYER DAMAGE
 --=============================================================================
+--TODO Track light attacks independently
+-- Track shielded damage independently
+--=============================================================================
+-- TRACK PLAYER DAMAGE
+--=============================================================================
 function CritTracker:OnCombatEvent(eventCode, result, isError, abilityName, abilityGraphic,
                                    abilityActionSlotType,
                                    sourceName, sourceType, targetName, targetType,
                                    hitValue, powerType, damageType, combatMechanic,
                                    sourceUnitId, targetUnitId, abilityId, overflow)
-    -- If we hit a target dummy, find its unit tag for health tracking
+    -- Handle dummy detection
     if sourceType == COMBAT_UNIT_TYPE_PLAYER and targetType == COMBAT_UNIT_TYPE_TARGET_DUMMY then
         if not self.dummyUnitTag then
             local dummyTags = { "reticleover", "boss1", "boss2", "boss3", "boss4", "boss5", "boss6" }
             for _, tag in ipairs(dummyTags) do
                 if DoesUnitExist(tag) and IsUnitAttackable(tag) and GetUnitName(tag) == targetName then
                     self.dummyUnitTag = tag
-                    -- Add dummy to discovered "bosses" for consistent tracking
                     self.discoveredBosses[targetName] = {
                         unitTag = tag,
                         discovered = true
@@ -384,38 +450,88 @@ function CritTracker:OnCombatEvent(eventCode, result, isError, abilityName, abil
         end
     end
 
-    -- Continue with existing damage tracking logic (unchanged)
-    if sourceType == COMBAT_UNIT_TYPE_PLAYER and hitValue > 1 then
-        self.playerDamage = self.playerDamage + hitValue
+    -- Only track player damage
+    if sourceType ~= COMBAT_UNIT_TYPE_PLAYER or hitValue <= 1 then
+        return
+    end
 
-        if result == ACTION_RESULT_CRITICAL_DAMAGE or result == ACTION_RESULT_DOT_TICK_CRITICAL then
-            self.critCount = self.critCount + 1
-            self.totalCritDamage = self.totalCritDamage + hitValue
-            self.fightCritCount = self.fightCritCount + 1
-            self.fightTotalCritDamage = self.fightTotalCritDamage + hitValue
+    -- Ignore shielded damage (doesn't crit)
+    if result == ACTION_RESULT_DAMAGE_SHIELDED then
+        return
+    end
 
-            -- Track execute phase crits
-            if self.inExecutePhase then
-                self.executePhaseCritCount = self.executePhaseCritCount + 1
-                self.executePhaseTotalCritDamage = self.executePhaseTotalCritDamage + hitValue
-            end
-        elseif result == ACTION_RESULT_DAMAGE or result == ACTION_RESULT_DOT_TICK then
-            self.normalCount = self.normalCount + 1
-            self.totalNormalDamage = self.totalNormalDamage + hitValue
-            self.fightNormalCount = self.fightNormalCount + 1
-            self.fightTotalNormalDamage = self.fightTotalNormalDamage + hitValue
+    -- Determine if this is a light attack
+    local isLightAttack = (abilityActionSlotType == ACTION_SLOT_TYPE_LIGHT_ATTACK)
 
-            -- Track execute phase normal hits
-            if self.inExecutePhase then
-                self.executePhaseNormalCount = self.executePhaseNormalCount + 1
-                self.executePhaseTotalNormalDamage = self.executePhaseTotalNormalDamage + hitValue
-            end
+    -- Track damage
+    self.playerDamage = self.playerDamage + hitValue
+
+    -- Process critical hits
+    if result == ACTION_RESULT_CRITICAL_DAMAGE or result == ACTION_RESULT_DOT_TICK_CRITICAL then
+        if isLightAttack then
+            -- Light attack crit
+            self.lightAttackCritCount = self.lightAttackCritCount + 1
+            self.lightAttackTotalCritDamage = self.lightAttackTotalCritDamage + hitValue
+            self.fightLightAttackCritCount = self.fightLightAttackCritCount + 1
+            self.fightLightAttackTotalCritDamage = self.fightLightAttackTotalCritDamage + hitValue
+        else
+            -- Ability/Heavy crit
+            self.abilityAndHeavyCritCount = self.abilityAndHeavyCritCount + 1
+            self.abilityAndHeavyTotalCritDamage = self.abilityAndHeavyTotalCritDamage + hitValue
+            self.fightAbilityAndHeavyCritCount = self.fightAbilityAndHeavyCritCount + 1
+            self.fightAbilityAndHeavyTotalCritDamage = self.fightAbilityAndHeavyTotalCritDamage + hitValue
+        end
+
+        -- Overall tracking (existing code)
+        self.critCount = self.critCount + 1
+        self.totalCritDamage = self.totalCritDamage + hitValue
+        self.fightCritCount = self.fightCritCount + 1
+        self.fightTotalCritDamage = self.fightTotalCritDamage + hitValue
+
+        -- Track execute phase crits
+        if self.inExecutePhase then
+            self.executePhaseCritCount = self.executePhaseCritCount + 1
+            self.executePhaseTotalCritDamage = self.executePhaseTotalCritDamage + hitValue
+        end
+
+        -- Process normal hits
+    elseif result == ACTION_RESULT_DAMAGE or result == ACTION_RESULT_DOT_TICK then
+        if isLightAttack then
+            -- Light attack normal
+            self.lightAttackNormalCount = self.lightAttackNormalCount + 1
+            self.lightAttackTotalNormalDamage = self.lightAttackTotalNormalDamage + hitValue
+            self.fightLightAttackNormalCount = self.fightLightAttackNormalCount + 1
+            self.fightLightAttackTotalNormalDamage = self.fightLightAttackTotalNormalDamage + hitValue
+        else
+            -- Ability/Heavy normal
+            self.abilityAndHeavyNormalCount = self.abilityAndHeavyNormalCount + 1
+            self.abilityAndHeavyTotalNormalDamage = self.abilityAndHeavyTotalNormalDamage + hitValue
+            self.fightAbilityAndHeavyNormalCount = self.fightAbilityAndHeavyNormalCount + 1
+            self.fightAbilityAndHeavyTotalNormalDamage = self.fightAbilityAndHeavyTotalNormalDamage + hitValue
+        end
+
+        -- Overall tracking (existing code)
+        self.normalCount = self.normalCount + 1
+        self.totalNormalDamage = self.totalNormalDamage + hitValue
+        self.fightNormalCount = self.fightNormalCount + 1
+        self.fightTotalNormalDamage = self.fightTotalNormalDamage + hitValue
+
+        -- Track execute phase normal hits
+        if self.inExecutePhase then
+            self.executePhaseNormalCount = self.executePhaseNormalCount + 1
+            self.executePhaseTotalNormalDamage = self.executePhaseTotalNormalDamage + hitValue
         end
     end
 
     if self.inCombat and not self.delay then
         self:UpdateExecutePhaseStatus()
-        self:UpdateDisplay()
+
+        -- Throttle display updates to reduce flickering
+        local currentTime = GetGameTimeMilliseconds()
+        if not self.lastDisplayUpdate or (currentTime - self.lastDisplayUpdate) >= 100 then
+            self.lastDisplayUpdate = currentTime
+            self:UpdateDisplay()
+        end
     end
 end
 
@@ -426,7 +542,7 @@ function CritTracker:UpdateDisplay()
     local totalHits = self.critCount + self.normalCount
     local charSheet = self:GetCharSheetCritChance()
 
-    -- Check if we should only show during execute phase
+    -- Check to only show during execute phase
     if self.savedVars.showExecutePhaseOnly and not self.inExecutePhase then
         line1_CritInfo:SetText("")
         line2_CritDamage:SetText("")
@@ -434,7 +550,7 @@ function CritTracker:UpdateDisplay()
         return
     end
 
-    -- Check if we should hide main lines during execute phase
+    -- Check to hide main lines during execute phase
     if self.savedVars.hideMainLinesInExecute and self.inExecutePhase then
         line1_CritInfo:SetText("")
         line2_CritDamage:SetText("")
@@ -1138,11 +1254,11 @@ local function Initialize()
     CritTracker:ApplyFontsToLabels()
     CritTracker:ApplyColorsToLabels()
 
-    -- Register combat event
+    --  combat event
     EVENT_MANAGER:RegisterForEvent(ADDON_NAME, EVENT_COMBAT_EVENT,
         function(...) CritTracker:OnCombatEvent(...) end)
 
-    -- Register weapon pair change event with the new optimized handler
+    --  weapon pair change event
     EVENT_MANAGER:RegisterForEvent(ADDON_NAME, EVENT_ACTIVE_WEAPON_PAIR_CHANGED,
         function(eventCode, activeWeaponPair, locked)
             CritTracker:OnActiveWeaponPairChanged(eventCode, activeWeaponPair, locked)
